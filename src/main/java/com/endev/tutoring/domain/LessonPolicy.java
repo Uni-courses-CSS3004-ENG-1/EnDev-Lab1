@@ -1,9 +1,9 @@
-package com.endev.tutoring;
+package com.endev.tutoring.domain;
 
-import com.endev.tutoring.LessonStatus.Cancelled;
-import com.endev.tutoring.LessonStatus.Completed;
-import com.endev.tutoring.LessonStatus.Confirmed;
-import com.endev.tutoring.LessonStatus.Requested;
+import com.endev.tutoring.domain.LessonStatus.Cancelled;
+import com.endev.tutoring.domain.LessonStatus.Completed;
+import com.endev.tutoring.domain.LessonStatus.Confirmed;
+import com.endev.tutoring.domain.LessonStatus.Requested;
 
 public final class LessonPolicy {
 
