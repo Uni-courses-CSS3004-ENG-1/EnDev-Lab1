@@ -7,7 +7,7 @@ public final class LessonPolicy {
     private final List<Rule> rules;
 
     public LessonPolicy() {
-        this(List.of(new TransitionRule()));
+        this(List.of(new UnpaidCannotComplete(), new TransitionRule()));
     }
 
     public LessonPolicy(List<Rule> rules) {
