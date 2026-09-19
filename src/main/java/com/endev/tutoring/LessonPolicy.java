@@ -1,25 +1,25 @@
 package com.endev.tutoring;
 
-import com.endev.tutoring.LessonStatus.Cancelled;
-import com.endev.tutoring.LessonStatus.Completed;
-import com.endev.tutoring.LessonStatus.Confirmed;
-import com.endev.tutoring.LessonStatus.Requested;
+import java.util.List;
 
 public final class LessonPolicy {
+
+    private final List<Rule> rules;
+
+    public LessonPolicy() {
+        this(List.of(new TransitionRule()));
+    }
+
+    public LessonPolicy(List<Rule> rules) {
+        this.rules = List.copyOf(rules);
+    }
 
     public LessonStatus move(LessonStatus from, LessonStatus to) {
         if (from == null || to == null) {
             throw new IllegalArgumentException("Both the current and the target status are required");
         }
-        boolean allowed = switch (from) {
-            case Requested() -> to instanceof Confirmed || to instanceof Cancelled;
-            case Confirmed() -> to instanceof Completed || to instanceof Cancelled;
-            case Completed() -> false;
-            case Cancelled() -> false;
-        };
-        if (!allowed) {
-            throw new IllegalStateException(
-                    "Cannot move a lesson from " + from.name() + " to " + to.name());
+        for (Rule rule : rules) {
+            rule.check(from, to);
         }
         return to;
     }
