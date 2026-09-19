@@ -32,6 +32,15 @@ class LessonPolicyTest {
         }
     }
 
+    @Test
+    @DisplayName("the transition rule rejects a final status change")
+    void transitionRuleRejectsFinalStatusChange() {
+        Rule rule = new TransitionRule();
+
+        assertThrows(IllegalStateException.class,
+                () -> rule.check(new LessonStatus.Completed(), new LessonStatus.Cancelled()));
+    }
+
     @ParameterizedTest(name = "id=\"{0}\"")
     @NullAndEmptySource
     @ValueSource(strings = {"   ", "\t"})
