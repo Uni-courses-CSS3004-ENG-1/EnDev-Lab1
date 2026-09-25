@@ -1,4 +1,4 @@
-package com.endev.tutoring;
+package com.endev.tutoring.domain;
 
 /** Sealed so {@link LessonPolicy} switches over every status without a default branch. */
 public sealed interface LessonStatus

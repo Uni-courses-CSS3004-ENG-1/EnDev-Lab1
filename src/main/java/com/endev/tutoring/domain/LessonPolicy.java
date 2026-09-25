@@ -1,4 +1,4 @@
-package com.endev.tutoring;
+package com.endev.tutoring.domain;
 
 import java.util.List;
 

@@ -1,0 +1,5 @@
+/**
+ * Outbound calls to other systems. Empty until a later lab; the ring exists so the
+ * dependency direction is visible now.
+ */
+package com.endev.tutoring.client;
