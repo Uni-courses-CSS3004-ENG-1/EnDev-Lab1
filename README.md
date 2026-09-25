@@ -56,7 +56,7 @@ The tutoring product uses an inward-facing package ring, with the domain at its 
 
 ```mermaid
 flowchart TB
-    dto["dto"] --> domain["domain<br/><br/>Rule<br/>TransitionRule<br/>UnpaidCannotComplete<br/>LessonService<br/><br/><i>imports no Spring</i>"]
+    dto["dto"] --> domain["domain<br/><br/>Rule<br/>TransitionRule<br/>UnpaidCannotComplete<br/>LessonService<br/><br/><i>domain imports no Spring</i>"]
     client["client"] --> domain
     handler["handler"] --> domain
     config["config"] --> domain
