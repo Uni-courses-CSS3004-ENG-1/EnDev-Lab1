@@ -5,6 +5,7 @@ import com.endev.tutoring.domain.LessonStatus.Completed;
 import com.endev.tutoring.domain.LessonStatus.Confirmed;
 import com.endev.tutoring.domain.LessonStatus.Requested;
 
+/** The status table from the README: which status may follow which. */
 public final class TransitionRule implements Rule {
 
     @Override

@@ -6,15 +6,19 @@ import com.endev.tutoring.domain.UnpaidCannotComplete;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-import java.util.List;
-
-// The rules stay plain Java; Spring only composes them here, so domain never imports Spring.
+// The rules are plain Java. Spring only puts them together here, so domain never imports Spring.
 @Configuration
 public class RuleConfig {
 
+    // One Rule that runs both rules, in order, on every move.
     @Bean
     public Rule lessonRules() {
-        List<Rule> chain = List.of(new UnpaidCannotComplete(), new TransitionRule());
-        return (from, to) -> chain.forEach(rule -> rule.check(from, to));
+        Rule unpaidCannotComplete = new UnpaidCannotComplete();
+        Rule transitionRule = new TransitionRule();
+
+        return (from, to) -> {
+            unpaidCannotComplete.check(from, to);
+            transitionRule.check(from, to);
+        };
     }
 }
