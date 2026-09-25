@@ -49,3 +49,25 @@ that has already been paid out, and the lesson would disappear from the tutor's
 earnings and from the commission the platform reports. If a student disputes a lesson
 that took place, that is a separate refund case. The record that the lesson happened
 stays as it is.
+
+## Package diagram
+
+The tutoring product uses an inward-facing package ring, with the domain at its centre.
+
+```mermaid
+flowchart TB
+    dto["dto"] --> domain["domain<br/><br/>Rule<br/>TransitionRule<br/>UnpaidCannotComplete<br/>LessonService<br/><br/><i>imports no Spring</i>"]
+    client["client"] --> domain
+    handler["handler"] --> domain
+    config["config"] --> domain
+
+    dto ~~~ client
+    client ~~~ handler
+    handler ~~~ config
+    config ~~~ dto
+
+    classDef outer fill:#f7f7f7,stroke:#555,stroke-width:1px
+    classDef core fill:#e8f1ff,stroke:#2457a6,stroke-width:2px
+    class dto,client,handler,config outer
+    class domain core
+```
