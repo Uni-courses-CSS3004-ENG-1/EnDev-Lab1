@@ -60,6 +60,7 @@ and `domain` uses none of them. **`domain` imports no Spring.**
   VendorLessonPayload    (empty,         LessonService        Application
   (vendor JSON →         HTTP later)     (@Service,           RuleConfig
    LessonStatus)                          injects Rule)       (@Bean: the rule chain)
+                                         LessonDemoRunner
        \                    |                 |                   /
         \                   |                 |                  /
          v                  v                 v                 v
@@ -83,3 +84,20 @@ and `domain` uses none of them. **`domain` imports no Spring.**
   the constructor, and `move(from, to)` calls `rules.check(from, to)` and returns `to`.
 - `VendorLessonPayload` (in `dto`) turns the vendor's status names (`PENDING`, `BOOKED`,
   `FINISHED`, `CANCELED`) into a `LessonStatus` and rejects anything else.
+- `LessonDemoRunner` (in `handler`) runs once on start-up and walks one lesson through
+  `LessonService`, so you can watch the rules work.
+
+## Run it
+
+```
+mvn spring-boot:run
+```
+
+```
+Lesson LES-2026-0042 arrived from the vendor as Requested
+  Requested -> Completed: forbidden (An unpaid lesson cannot be completed)
+  Requested -> Confirmed: allowed
+  Confirmed -> Completed: allowed
+  Completed -> Cancelled: forbidden (Cannot move a lesson from Completed to Cancelled)
+Lesson LES-2026-0042 ends as Completed
+```
