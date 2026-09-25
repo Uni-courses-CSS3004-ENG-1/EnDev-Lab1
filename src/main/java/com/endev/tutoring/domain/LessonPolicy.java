@@ -2,6 +2,7 @@ package com.endev.tutoring.domain;
 
 import java.util.List;
 
+/** Runs every rule on a status change, without Spring. */
 public final class LessonPolicy {
 
     private final List<Rule> rules;

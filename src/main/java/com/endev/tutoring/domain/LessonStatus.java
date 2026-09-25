@@ -1,6 +1,6 @@
 package com.endev.tutoring.domain;
 
-/** Sealed so {@link LessonPolicy} switches over every status without a default branch. */
+/** Sealed so {@link TransitionRule} switches over every status without a default branch. */
 public sealed interface LessonStatus
         permits LessonStatus.Requested, LessonStatus.Confirmed,
                 LessonStatus.Completed, LessonStatus.Cancelled {
@@ -13,7 +13,7 @@ public sealed interface LessonStatus
 
     record Cancelled() implements LessonStatus {}
 
-    // No production caller: JUnit uses this to convert the names in LessonPolicyTest's CSV rows.
+    // No production caller: JUnit uses this to turn the names in the tests' CSV rows into statuses.
     static LessonStatus of(String name) {
         return switch (name) {
             case "Requested" -> new Requested();

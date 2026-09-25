@@ -7,7 +7,7 @@ holds the payment until the lesson has taken place, then pays the tutor and keep
 commission on every lesson. Money moves each time a lesson changes status, so the order
 of those changes is enforced in code rather than left to whoever edits the record.
 
-Run the tests with `mvn -q test` (Java 21).
+Java 21. Run the tests with `mvn -q verify` and start the app with `mvn spring-boot:run`.
 
 ## Core item
 
@@ -52,22 +52,34 @@ stays as it is.
 
 ## Package diagram
 
-The tutoring product uses an inward-facing package ring, with the domain at its centre.
+The code sits in five packages. Arrows point inward: the outer packages use `domain`,
+and `domain` uses none of them. **`domain` imports no Spring.**
 
-```mermaid
-flowchart TB
-    dto["dto"] --> domain["domain<br/><br/>Rule<br/>TransitionRule<br/>UnpaidCannotComplete<br/>LessonService<br/><br/><i>domain imports no Spring</i>"]
-    client["client"] --> domain
-    handler["handler"] --> domain
-    config["config"] --> domain
-
-    dto ~~~ client
-    client ~~~ handler
-    handler ~~~ config
-    config ~~~ dto
-
-    classDef outer fill:#f7f7f7,stroke:#555,stroke-width:1px
-    classDef core fill:#e8f1ff,stroke:#2457a6,stroke-width:2px
-    class dto,client,handler,config outer
-    class domain core
 ```
+  dto                    client          handler              config
+  VendorLessonPayload    (empty,         LessonService        Application
+  (vendor JSON →         HTTP later)     (@Service,           RuleConfig
+   LessonStatus)                          injects Rule)       (@Bean: the rule chain)
+       \                    |                 |                   /
+        \                   |                 |                  /
+         v                  v                 v                 v
+  +-------------------------------------------------------------------+
+  |                             domain                                |
+  |          LessonId      LessonStatus      LessonPolicy             |
+  |          Rule  ←  TransitionRule  +  UnpaidCannotComplete         |
+  |                          (no Spring)                              |
+  +-------------------------------------------------------------------+
+```
+
+## How Spring is joined
+
+- `Rule` has one method, `check(from, to)`, and throws `IllegalStateException` when a
+  move is forbidden. Two plain-Java classes implement it:
+  - `TransitionRule`: the status table above
+  - `UnpaidCannotComplete`: the stop-factor. A lesson cannot be completed before the
+    platform holds the payment
+- `RuleConfig` (in `config`) has one `@Bean` that runs both rules on every move.
+- `LessonService` (in `handler`) is a `@Service`. Spring passes it that `Rule` through
+  the constructor, and `move(from, to)` calls `rules.check(from, to)` and returns `to`.
+- `VendorLessonPayload` (in `dto`) turns the vendor's status names (`PENDING`, `BOOKED`,
+  `FINISHED`, `CANCELED`) into a `LessonStatus` and rejects anything else.
