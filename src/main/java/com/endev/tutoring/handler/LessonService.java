@@ -4,7 +4,6 @@ import com.endev.tutoring.domain.LessonStatus;
 import com.endev.tutoring.domain.Rule;
 import org.springframework.stereotype.Service;
 
-/** The Spring-facing entry point to the lesson process. It owns no rules of its own. */
 @Service
 public class LessonService {
 

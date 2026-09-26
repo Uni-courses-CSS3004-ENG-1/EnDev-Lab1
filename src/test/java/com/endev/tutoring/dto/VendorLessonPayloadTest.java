@@ -2,44 +2,53 @@ package com.endev.tutoring.dto;
 
 import com.endev.tutoring.domain.LessonId;
 import com.endev.tutoring.domain.LessonStatus;
-import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
-import org.junit.jupiter.params.provider.NullAndEmptySource;
-import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class VendorLessonPayloadTest {
 
-    @ParameterizedTest(name = "{0} -> {1}")
-    @CsvSource({
-            "PENDING, REQUESTED",
-            "BOOKED, CONFIRMED",
-            "FINISHED, COMPLETED",
-            "CANCELED, CANCELLED"
-    })
-    @DisplayName("each vendor status maps onto one lesson status")
-    void vendorStatusMapsOntoLessonStatus(String vendorStatus, LessonStatus expected) {
-        assertEquals(expected, new VendorLessonPayload("LES-2026-0042", vendorStatus).toLessonStatus());
+    @Test
+    void pendingIsRequested() {
+        assertEquals(LessonStatus.REQUESTED, new VendorLessonPayload("LES-1", "PENDING").toLessonStatus());
     }
 
-    @ParameterizedTest(name = "status=\"{0}\"")
-    @NullAndEmptySource
-    @ValueSource(strings = {"REFUNDED", "booked", "Confirmed"})
-    @DisplayName("an unknown vendor status is rejected")
-    void unknownVendorStatusIsRejected(String vendorStatus) {
-        VendorLessonPayload payload = new VendorLessonPayload("LES-2026-0042", vendorStatus);
+    @Test
+    void bookedIsConfirmed() {
+        assertEquals(LessonStatus.CONFIRMED, new VendorLessonPayload("LES-1", "BOOKED").toLessonStatus());
+    }
 
+    @Test
+    void finishedIsCompleted() {
+        assertEquals(LessonStatus.COMPLETED, new VendorLessonPayload("LES-1", "FINISHED").toLessonStatus());
+    }
+
+    @Test
+    void canceledIsCancelled() {
+        assertEquals(LessonStatus.CANCELLED, new VendorLessonPayload("LES-1", "CANCELED").toLessonStatus());
+    }
+
+    @Test
+    void unknownStatusIsRejected() {
+        VendorLessonPayload payload = new VendorLessonPayload("LES-1", "REFUNDED");
         assertThrows(IllegalArgumentException.class, payload::toLessonStatus);
     }
 
     @Test
-    @DisplayName("the vendor lesson id becomes a LessonId")
-    void vendorLessonIdBecomesLessonId() {
-        assertEquals(new LessonId("LES-2026-0042"),
-                new VendorLessonPayload("LES-2026-0042", "BOOKED").toLessonId());
+    void lowercaseStatusIsRejected() {
+        VendorLessonPayload payload = new VendorLessonPayload("LES-1", "booked");
+        assertThrows(IllegalArgumentException.class, payload::toLessonStatus);
+    }
+
+    @Test
+    void nullStatusIsRejected() {
+        VendorLessonPayload payload = new VendorLessonPayload("LES-1", null);
+        assertThrows(IllegalArgumentException.class, payload::toLessonStatus);
+    }
+
+    @Test
+    void lessonIdIsMapped() {
+        assertEquals(new LessonId("LES-1"), new VendorLessonPayload("LES-1", "BOOKED").toLessonId());
     }
 }

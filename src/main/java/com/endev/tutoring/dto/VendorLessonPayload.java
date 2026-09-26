@@ -3,10 +3,7 @@ package com.endev.tutoring.dto;
 import com.endev.tutoring.domain.LessonId;
 import com.endev.tutoring.domain.LessonStatus;
 
-/**
- * A lesson as the scheduling vendor sends it, for example
- * {@code {"lessonId": "LES-2026-0042", "status": "BOOKED"}}.
- */
+// JSON from the vendor looks like: {"lessonId": "LES-2026-0042", "status": "BOOKED"}
 public record VendorLessonPayload(String lessonId, String status) {
 
     public LessonId toLessonId() {
@@ -14,12 +11,20 @@ public record VendorLessonPayload(String lessonId, String status) {
     }
 
     public LessonStatus toLessonStatus() {
-        return switch (status) {
-            case "PENDING" -> LessonStatus.REQUESTED;
-            case "BOOKED" -> LessonStatus.CONFIRMED;
-            case "FINISHED" -> LessonStatus.COMPLETED;
-            case "CANCELED" -> LessonStatus.CANCELLED;
-            case null, default -> throw new IllegalArgumentException("Unknown vendor lesson status: " + status);
-        };
+        if (status == null) {
+            throw new IllegalArgumentException("Vendor status is null");
+        }
+        switch (status) {
+            case "PENDING":
+                return LessonStatus.REQUESTED;
+            case "BOOKED":
+                return LessonStatus.CONFIRMED;
+            case "FINISHED":
+                return LessonStatus.COMPLETED;
+            case "CANCELED":
+                return LessonStatus.CANCELLED;
+            default:
+                throw new IllegalArgumentException("Unknown vendor lesson status: " + status);
+        }
     }
 }

@@ -3,8 +3,7 @@ package com.endev.tutoring.config;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
-// scanBasePackages is required: the class sits in config, so the default scan would
-// cover config alone and never reach the services in the rings beside it.
+// Application is in the config package, so we tell Spring to scan the whole project
 @SpringBootApplication(scanBasePackages = "com.endev.tutoring")
 public class Application {
 

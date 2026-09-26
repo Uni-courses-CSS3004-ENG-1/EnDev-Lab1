@@ -1,19 +1,18 @@
 package com.endev.tutoring.domain;
 
-import static com.endev.tutoring.domain.LessonStatus.CANCELLED;
-import static com.endev.tutoring.domain.LessonStatus.COMPLETED;
-import static com.endev.tutoring.domain.LessonStatus.CONFIRMED;
-
-/** The status table from the README: which status may follow which. */
-public final class TransitionRule implements Rule {
+public class TransitionRule implements Rule {
 
     @Override
     public void check(LessonStatus from, LessonStatus to) {
-        boolean allowed = switch (from) {
-            case REQUESTED -> to == CONFIRMED || to == CANCELLED;
-            case CONFIRMED -> to == COMPLETED || to == CANCELLED;
-            case COMPLETED, CANCELLED -> false;
-        };
+        boolean allowed = false;
+
+        if (from == LessonStatus.REQUESTED) {
+            allowed = to == LessonStatus.CONFIRMED || to == LessonStatus.CANCELLED;
+        } else if (from == LessonStatus.CONFIRMED) {
+            allowed = to == LessonStatus.COMPLETED || to == LessonStatus.CANCELLED;
+        }
+        // COMPLETED and CANCELLED are final, nothing can come after them
+
         if (!allowed) {
             throw new IllegalStateException("Cannot move a lesson from " + from + " to " + to);
         }

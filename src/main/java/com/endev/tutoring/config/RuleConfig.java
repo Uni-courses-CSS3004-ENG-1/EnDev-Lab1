@@ -9,13 +9,12 @@ import org.springframework.context.annotation.Configuration;
 
 import java.util.List;
 
-// The rules are plain Java. Spring only puts them together here, so domain never imports Spring.
 @Configuration
 public class RuleConfig {
 
-    // The stop-factor runs first, so an unpaid lesson gets the more specific message.
     @Bean
     public Rule lessonRules() {
-        return new LessonPolicy(List.of(new UnpaidCannotComplete(), new TransitionRule()));
+        List<Rule> rules = List.of(new UnpaidCannotComplete(), new TransitionRule());
+        return new LessonPolicy(rules);
     }
 }

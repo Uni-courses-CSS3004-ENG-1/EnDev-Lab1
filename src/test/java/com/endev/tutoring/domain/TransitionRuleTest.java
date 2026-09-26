@@ -1,8 +1,6 @@
 package com.endev.tutoring.domain;
 
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -10,32 +8,50 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class TransitionRuleTest {
 
-    private final Rule rule = new TransitionRule();
+    private final TransitionRule rule = new TransitionRule();
 
-    @ParameterizedTest(name = "{0} -> {1}")
-    @CsvSource({
-            "REQUESTED, CONFIRMED",
-            "REQUESTED, CANCELLED",
-            "CONFIRMED, COMPLETED",
-            "CONFIRMED, CANCELLED"
-    })
-    @DisplayName("an allowed move passes")
-    void allowedMovePasses(LessonStatus from, LessonStatus to) {
-        assertDoesNotThrow(() -> rule.check(from, to));
+    @Test
+    void requestedToConfirmedIsAllowed() {
+        assertDoesNotThrow(() -> rule.check(LessonStatus.REQUESTED, LessonStatus.CONFIRMED));
     }
 
-    @ParameterizedTest(name = "{0} -> {1}")
-    @CsvSource({
-            "REQUESTED, COMPLETED",
-            "REQUESTED, REQUESTED",
-            "COMPLETED, CANCELLED",
-            "CANCELLED, CONFIRMED",
-            "CONFIRMED, REQUESTED"
-    })
-    @DisplayName("a forbidden move throws and names both statuses")
-    void forbiddenMoveThrows(LessonStatus from, LessonStatus to) {
-        IllegalStateException error = assertThrows(IllegalStateException.class, () -> rule.check(from, to));
+    @Test
+    void requestedToCancelledIsAllowed() {
+        assertDoesNotThrow(() -> rule.check(LessonStatus.REQUESTED, LessonStatus.CANCELLED));
+    }
 
-        assertEquals("Cannot move a lesson from " + from + " to " + to, error.getMessage());
+    @Test
+    void confirmedToCompletedIsAllowed() {
+        assertDoesNotThrow(() -> rule.check(LessonStatus.CONFIRMED, LessonStatus.COMPLETED));
+    }
+
+    @Test
+    void confirmedToCancelledIsAllowed() {
+        assertDoesNotThrow(() -> rule.check(LessonStatus.CONFIRMED, LessonStatus.CANCELLED));
+    }
+
+    @Test
+    void requestedToCompletedIsForbidden() {
+        assertThrows(IllegalStateException.class,
+                () -> rule.check(LessonStatus.REQUESTED, LessonStatus.COMPLETED));
+    }
+
+    @Test
+    void completedToCancelledIsForbidden() {
+        IllegalStateException e = assertThrows(IllegalStateException.class,
+                () -> rule.check(LessonStatus.COMPLETED, LessonStatus.CANCELLED));
+        assertEquals("Cannot move a lesson from COMPLETED to CANCELLED", e.getMessage());
+    }
+
+    @Test
+    void cancelledLessonCannotMove() {
+        assertThrows(IllegalStateException.class,
+                () -> rule.check(LessonStatus.CANCELLED, LessonStatus.CONFIRMED));
+    }
+
+    @Test
+    void cannotGoBack() {
+        assertThrows(IllegalStateException.class,
+                () -> rule.check(LessonStatus.CONFIRMED, LessonStatus.REQUESTED));
     }
 }

@@ -1,7 +1,7 @@
 package com.endev.tutoring.domain;
 
-/** One business rule about a status change. It throws IllegalStateException when the change is forbidden. */
 public interface Rule {
 
+    // throws IllegalStateException if the move is not allowed
     void check(LessonStatus from, LessonStatus to);
 }

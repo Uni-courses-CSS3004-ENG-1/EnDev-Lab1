@@ -6,18 +6,14 @@ import com.endev.tutoring.dto.VendorLessonPayload;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 
-import static com.endev.tutoring.domain.LessonStatus.CANCELLED;
-import static com.endev.tutoring.domain.LessonStatus.COMPLETED;
-import static com.endev.tutoring.domain.LessonStatus.CONFIRMED;
-
-/** Runs on start-up so mvn spring-boot:run shows the lesson process at work. */
+// Runs when the app starts and shows which moves are allowed
 @Component
 public class LessonDemoRunner implements CommandLineRunner {
 
-    private final LessonService service;
+    private final LessonService lessonService;
 
-    public LessonDemoRunner(LessonService service) {
-        this.service = service;
+    public LessonDemoRunner(LessonService lessonService) {
+        this.lessonService = lessonService;
     }
 
     @Override
@@ -27,19 +23,19 @@ public class LessonDemoRunner implements CommandLineRunner {
         LessonStatus status = payload.toLessonStatus();
         System.out.println("Lesson " + id.value() + " arrived from the vendor as " + status);
 
-        status = tryMove(status, COMPLETED);
-        status = tryMove(status, CONFIRMED);
-        status = tryMove(status, COMPLETED);
-        status = tryMove(status, CANCELLED);
+        status = tryMove(status, LessonStatus.COMPLETED);
+        status = tryMove(status, LessonStatus.CONFIRMED);
+        status = tryMove(status, LessonStatus.COMPLETED);
+        status = tryMove(status, LessonStatus.CANCELLED);
 
         System.out.println("Lesson " + id.value() + " ends as " + status);
     }
 
     private LessonStatus tryMove(LessonStatus from, LessonStatus to) {
         try {
-            LessonStatus result = service.move(from, to);
+            lessonService.move(from, to);
             System.out.println("  " + from + " -> " + to + ": allowed");
-            return result;
+            return to;
         } catch (IllegalStateException e) {
             System.out.println("  " + from + " -> " + to + ": forbidden (" + e.getMessage() + ")");
             return from;
