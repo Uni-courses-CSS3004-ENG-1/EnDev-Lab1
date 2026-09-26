@@ -15,10 +15,10 @@ public record VendorLessonPayload(String lessonId, String status) {
 
     public LessonStatus toLessonStatus() {
         return switch (status) {
-            case "PENDING" -> new LessonStatus.Requested();
-            case "BOOKED" -> new LessonStatus.Confirmed();
-            case "FINISHED" -> new LessonStatus.Completed();
-            case "CANCELED" -> new LessonStatus.Cancelled();
+            case "PENDING" -> LessonStatus.REQUESTED;
+            case "BOOKED" -> LessonStatus.CONFIRMED;
+            case "FINISHED" -> LessonStatus.COMPLETED;
+            case "CANCELED" -> LessonStatus.CANCELLED;
             case null, default -> throw new IllegalArgumentException("Unknown vendor lesson status: " + status);
         };
     }

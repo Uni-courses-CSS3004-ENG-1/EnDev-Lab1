@@ -1,9 +1,8 @@
 package com.endev.tutoring.domain;
 
-import com.endev.tutoring.domain.LessonStatus.Cancelled;
-import com.endev.tutoring.domain.LessonStatus.Completed;
-import com.endev.tutoring.domain.LessonStatus.Confirmed;
-import com.endev.tutoring.domain.LessonStatus.Requested;
+import static com.endev.tutoring.domain.LessonStatus.CANCELLED;
+import static com.endev.tutoring.domain.LessonStatus.COMPLETED;
+import static com.endev.tutoring.domain.LessonStatus.CONFIRMED;
 
 /** The status table from the README: which status may follow which. */
 public final class TransitionRule implements Rule {
@@ -11,14 +10,12 @@ public final class TransitionRule implements Rule {
     @Override
     public void check(LessonStatus from, LessonStatus to) {
         boolean allowed = switch (from) {
-            case Requested() -> to instanceof Confirmed || to instanceof Cancelled;
-            case Confirmed() -> to instanceof Completed || to instanceof Cancelled;
-            case Completed() -> false;
-            case Cancelled() -> false;
+            case REQUESTED -> to == CONFIRMED || to == CANCELLED;
+            case CONFIRMED -> to == COMPLETED || to == CANCELLED;
+            case COMPLETED, CANCELLED -> false;
         };
         if (!allowed) {
-            throw new IllegalStateException(
-                    "Cannot move a lesson from " + from.name() + " to " + to.name());
+            throw new IllegalStateException("Cannot move a lesson from " + from + " to " + to);
         }
     }
 }

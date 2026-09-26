@@ -1,30 +1,17 @@
 package com.endev.tutoring.domain;
 
-/** Sealed so {@link TransitionRule} switches over every status without a default branch. */
-public sealed interface LessonStatus
-        permits LessonStatus.Requested, LessonStatus.Confirmed,
-                LessonStatus.Completed, LessonStatus.Cancelled {
+/** Where a lesson stands, from the student asking for a slot to the tutor being paid. */
+public enum LessonStatus {
 
-    record Requested() implements LessonStatus {}
+    /** The student asked a tutor for a time slot. No money has moved yet. */
+    REQUESTED,
 
-    record Confirmed() implements LessonStatus {}
+    /** The tutor accepted the slot and the platform holds the student's payment. */
+    CONFIRMED,
 
-    record Completed() implements LessonStatus {}
+    /** The lesson took place: the tutor is paid and the platform keeps its commission. Final. */
+    COMPLETED,
 
-    record Cancelled() implements LessonStatus {}
-
-    // No production caller: JUnit uses this to turn the names in the tests' CSV rows into statuses.
-    static LessonStatus of(String name) {
-        return switch (name) {
-            case "Requested" -> new Requested();
-            case "Confirmed" -> new Confirmed();
-            case "Completed" -> new Completed();
-            case "Cancelled" -> new Cancelled();
-            case null, default -> throw new IllegalArgumentException("Unknown lesson status: " + name);
-        };
-    }
-
-    default String name() {
-        return getClass().getSimpleName();
-    }
+    /** The lesson was called off before it took place; any held payment went back to the student. Final. */
+    CANCELLED
 }

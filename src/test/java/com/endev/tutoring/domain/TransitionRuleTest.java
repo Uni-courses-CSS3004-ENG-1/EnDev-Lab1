@@ -14,10 +14,10 @@ class TransitionRuleTest {
 
     @ParameterizedTest(name = "{0} -> {1}")
     @CsvSource({
-            "Requested, Confirmed",
-            "Requested, Cancelled",
-            "Confirmed, Completed",
-            "Confirmed, Cancelled"
+            "REQUESTED, CONFIRMED",
+            "REQUESTED, CANCELLED",
+            "CONFIRMED, COMPLETED",
+            "CONFIRMED, CANCELLED"
     })
     @DisplayName("an allowed move passes")
     void allowedMovePasses(LessonStatus from, LessonStatus to) {
@@ -26,15 +26,16 @@ class TransitionRuleTest {
 
     @ParameterizedTest(name = "{0} -> {1}")
     @CsvSource({
-            "Requested, Completed",
-            "Completed, Cancelled",
-            "Cancelled, Confirmed",
-            "Confirmed, Requested"
+            "REQUESTED, COMPLETED",
+            "REQUESTED, REQUESTED",
+            "COMPLETED, CANCELLED",
+            "CANCELLED, CONFIRMED",
+            "CONFIRMED, REQUESTED"
     })
     @DisplayName("a forbidden move throws and names both statuses")
     void forbiddenMoveThrows(LessonStatus from, LessonStatus to) {
         IllegalStateException error = assertThrows(IllegalStateException.class, () -> rule.check(from, to));
 
-        assertEquals("Cannot move a lesson from " + from.name() + " to " + to.name(), error.getMessage());
+        assertEquals("Cannot move a lesson from " + from + " to " + to, error.getMessage());
     }
 }

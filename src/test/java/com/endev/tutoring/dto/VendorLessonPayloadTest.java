@@ -16,10 +16,10 @@ class VendorLessonPayloadTest {
 
     @ParameterizedTest(name = "{0} -> {1}")
     @CsvSource({
-            "PENDING, Requested",
-            "BOOKED, Confirmed",
-            "FINISHED, Completed",
-            "CANCELED, Cancelled"
+            "PENDING, REQUESTED",
+            "BOOKED, CONFIRMED",
+            "FINISHED, COMPLETED",
+            "CANCELED, CANCELLED"
     })
     @DisplayName("each vendor status maps onto one lesson status")
     void vendorStatusMapsOntoLessonStatus(String vendorStatus, LessonStatus expected) {
