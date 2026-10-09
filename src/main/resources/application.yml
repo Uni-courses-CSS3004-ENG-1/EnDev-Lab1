@@ -1,0 +1,6 @@
+# Classroom laptop default. Not a production secret.
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/css
+    username: css
+    password: css
