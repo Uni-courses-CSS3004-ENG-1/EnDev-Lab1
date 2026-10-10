@@ -1,6 +1,9 @@
 package com.endev.tutoring.domain;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -13,18 +16,10 @@ class LessonIdTest {
         assertEquals("LES-2026-0042", id.value());
     }
 
-    @Test
-    void nullIdIsRejected() {
-        assertThrows(IllegalArgumentException.class, () -> new LessonId(null));
-    }
-
-    @Test
-    void emptyIdIsRejected() {
-        assertThrows(IllegalArgumentException.class, () -> new LessonId(""));
-    }
-
-    @Test
-    void blankIdIsRejected() {
-        assertThrows(IllegalArgumentException.class, () -> new LessonId("   "));
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {"   ", "\t", "\n"})
+    void nullOrBlankIdIsRejected(String value) {
+        assertThrows(IllegalArgumentException.class, () -> new LessonId(value));
     }
 }

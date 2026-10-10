@@ -4,11 +4,10 @@ import java.util.List;
 
 public class LessonPolicy implements Rule {
 
-    @Autowired
-    private  List<Rule> rules;
+    private final List<Rule> rules;
 
     public LessonPolicy(List<Rule> rules) {
-        this.rules = rules;
+        this.rules = List.copyOf(rules);
     }
 
     @Override

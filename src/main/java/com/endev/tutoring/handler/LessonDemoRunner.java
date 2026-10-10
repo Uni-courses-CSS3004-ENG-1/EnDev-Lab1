@@ -23,17 +23,17 @@ public class LessonDemoRunner implements CommandLineRunner {
         LessonStatus status = payload.toLessonStatus();
         System.out.println("Lesson " + id.value() + " arrived from the vendor as " + status);
 
-        status = tryMove(status, LessonStatus.COMPLETED);
-        status = tryMove(status, LessonStatus.CONFIRMED);
-        status = tryMove(status, LessonStatus.COMPLETED);
-        status = tryMove(status, LessonStatus.CANCELLED);
+        status = tryMove(id, status, LessonStatus.COMPLETED);
+        status = tryMove(id, status, LessonStatus.CONFIRMED);
+        status = tryMove(id, status, LessonStatus.COMPLETED);
+        status = tryMove(id, status, LessonStatus.CANCELLED);
 
         System.out.println("Lesson " + id.value() + " ends as " + status);
     }
 
-    private LessonStatus tryMove(LessonStatus from, LessonStatus to) {
+    private LessonStatus tryMove(LessonId id, LessonStatus from, LessonStatus to) {
         try {
-            lessonService.move(from, to);
+            lessonService.move(id, from, to);
             System.out.println("  " + from + " -> " + to + ": allowed");
             return to;
         } catch (IllegalStateException e) {
