@@ -7,7 +7,8 @@ holds the payment until the lesson has taken place, then pays the tutor and keep
 commission on every lesson. Money moves each time a lesson changes status, so the order
 of those changes is enforced in code rather than left to whoever edits the record.
 
-Java 21. Run the tests with `mvn -q verify` and start the app with `mvn spring-boot:run`.
+Java 21 and PostgreSQL. Start the database with `docker compose up -d`, run the tests with
+`mvn -q verify` and start the app with `mvn spring-boot:run` (see [Run it](#run-it)).
 
 ## Core item
 
@@ -57,24 +58,26 @@ stays as it is.
 
 ## Package diagram
 
-The code sits in five packages. Arrows point inward: the outer packages use `domain`,
-and `domain` uses none of them. **`domain` imports no Spring.**
+The code sits in six packages. Arrows point inward: the outer packages use `domain`,
+and `domain` uses none of them. **`domain` imports no Spring and no `java.sql`.**
 
 ```
-  dto                    client          handler              config
-  VendorLessonPayload    (empty,         LessonService        Application
-  (vendor JSON →         HTTP later)     (@Service,           RuleConfig
-   LessonStatus)                          injects Rule)       (@Bean: LessonPolicy)
-                                         LessonDemoRunner
-       \                    |                 |                   /
-        \                   |                 |                  /
-         v                  v                 v                 v
-  +-------------------------------------------------------------------+
-  |                             domain                                |
-  |          LessonId      LessonStatus      LessonPolicy             |
-  |   Rule  ←  TransitionRule, UnpaidCannotComplete, LessonPolicy     |
-  |                          (no Spring)                              |
-  +-------------------------------------------------------------------+
+  dto                  client               handler               persistence      config
+  VendorLessonPayload  LoggingPaymentClient LessonService         LessonJdbc       Application
+  (vendor JSON →       (PaymentPort,        (@Service: Rule +     (@Repository,    RuleConfig
+   LessonStatus)        prints only)         PaymentPort)          JdbcTemplate)   (@Bean: LessonPolicy)
+                                            LessonRegistration         ^
+                                            (@Service,                 |
+                                             @Transactional) ----------+
+                                            LessonDemoRunner
+       \                    |                     |                    |              /
+        v                   v                     v                    v             v
+  +-----------------------------------------------------------------------------------------+
+  |                                        domain                                           |
+  |      LessonId     LessonStatus     LessonPolicy     PaymentPort     DuplicateLesson       |
+  |      Rule  ←  TransitionRule, UnpaidCannotComplete, LessonPolicy                         |
+  |                              (no Spring, no java.sql)                                   |
+  +-----------------------------------------------------------------------------------------+
 ```
 
 ## How Spring is joined
@@ -88,23 +91,74 @@ and `domain` uses none of them. **`domain` imports no Spring.**
   missing status.
 - `RuleConfig` (in `config`) has one `@Bean` that builds a `LessonPolicy` from
   `UnpaidCannotComplete` and then `TransitionRule`. This is the only place the order is set.
-- `LessonService` (in `handler`) is a `@Service`. Spring passes it that `Rule` through
-  the constructor, and `move(from, to)` calls `rules.check(from, to)` and returns `to`.
+- `LessonService` (in `handler`) is a `@Service`. Spring passes it that `Rule` and a
+  `PaymentPort` through the constructor. `move(from, to)` calls `rules.check(from, to)` and
+  returns `to`. `move(lesson, from, to)` does the same and then moves the money: `CONFIRMED`
+  holds the payment, `COMPLETED` releases it to the tutor, `CONFIRMED → CANCELLED` refunds it.
+- `PaymentPort` (in `domain`) is the outbound port to the payment provider.
+  `LoggingPaymentClient` (in `client`) stands in for it and only prints. In
+  `LessonServicePaymentTest` the port is a Mockito mock, so no test calls a real endpoint.
 - `VendorLessonPayload` (in `dto`) turns the vendor's status names (`PENDING`, `BOOKED`,
   `FINISHED`, `CANCELED`) into a `LessonStatus` and rejects anything else.
 - `LessonDemoRunner` (in `handler`) runs once on start-up and walks one lesson through
   `LessonService`, so you can watch the rules work.
 
+## Storage
+
+One table, written by hand in `src/main/resources/db/schema.sql`. Nothing generates it
+(no JPA, no Hibernate, no Flyway).
+
+```sql
+CREATE TABLE lesson (
+  id            uuid PRIMARY KEY,
+  business_key  text NOT NULL UNIQUE,
+  status        text NOT NULL,
+  subject       text NOT NULL,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT lesson_status_known
+    CHECK (status IN ('REQUESTED', 'CONFIRMED', 'COMPLETED', 'CANCELLED'))
+);
+```
+
+- `id` is the surrogate key. `business_key` is the `LessonId` people read (`LES-2026-0042`).
+  It is `UNIQUE` and `NOT NULL`, but it is not the primary key, so a change to its format
+  never touches a foreign key. `LessonId` rejects blank values before they reach the database.
+- The `CHECK` lists the same four statuses as the table above.
+- `LessonJdbc` (in `persistence`) is the only class that writes SQL. It runs the `INSERT`,
+  the `count(*)` and a status read through `JdbcTemplate` with `?` placeholders, and maps
+  `LessonStatus` to and from the `text` column. An unknown text from the database throws.
+  It does not become a new status.
+- `LessonRegistration` (in `handler`) is the `@Service` that holds `@Transactional`:
+  - `register(id, lesson, subject)` is one transaction per call. A second lesson with the
+    same business key throws `DuplicateLesson`, and the first one stays (count 1).
+  - `insertTwice(lesson)` is one transaction with two inserts of the same key. The second
+    fails, so the first is rolled back too (count 0).
+  - Both catch Spring's `DuplicateKeyException` (SQLState `23505`, a
+    `DataIntegrityViolationException`) and throw `DuplicateLesson`. That exception lives
+    in `domain` and is unchecked, so the transaction rolls back.
+- The tests apply `schema.sql` to a clean table themselves. None of them is
+  `@Transactional`, so every count comes from a separate query that sees only committed rows.
+
 ## Run it
 
+The tests need the classroom PostgreSQL (`localhost:5432/css`, user `css`, password `css`,
+set in `application.yml`). `compose.yaml` runs only that database:
+
 ```
+docker compose up -d
+mvn -q verify
 mvn spring-boot:run
+docker compose down
 ```
+
+`mvn spring-boot:run` prints:
 
 ```
 Lesson LES-2026-0042 arrived from the vendor as REQUESTED
   REQUESTED -> COMPLETED: forbidden (An unpaid lesson cannot be completed)
+  payment: hold for LES-2026-0042
   REQUESTED -> CONFIRMED: allowed
+  payment: release to the tutor for LES-2026-0042
   CONFIRMED -> COMPLETED: allowed
   COMPLETED -> CANCELLED: forbidden (Cannot move a lesson from COMPLETED to CANCELLED)
 Lesson LES-2026-0042 ends as COMPLETED
