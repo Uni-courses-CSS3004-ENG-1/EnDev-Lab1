@@ -18,7 +18,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-// Runs against the classroom PostgreSQL. No @Transactional: every insert really commits.
+// Runs against the classroom PostgreSQL. Each insert really commits for the test.
 @SpringBootTest(classes = Application.class)
 class LessonJdbcTest {
 
