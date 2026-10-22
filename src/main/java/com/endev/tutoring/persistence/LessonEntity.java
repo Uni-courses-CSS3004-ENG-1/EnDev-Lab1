@@ -28,6 +28,10 @@ public class LessonEntity {
     @Column(nullable = false)
     private String subject;
 
+    // added by V2; rows from before V2 got 'UNASSIGNED' from the column default
+    @Column(nullable = false)
+    private String tutor;
+
     // filled by DEFAULT now(); if Java sent it, the null would replace the default
     @Column(name = "created_at", insertable = false, updatable = false)
     private OffsetDateTime createdAt;
@@ -62,6 +66,14 @@ public class LessonEntity {
 
     public void setSubject(String subject) {
         this.subject = subject;
+    }
+
+    public String getTutor() {
+        return tutor;
+    }
+
+    public void setTutor(String tutor) {
+        this.tutor = tutor;
     }
 
     public OffsetDateTime getCreatedAt() {

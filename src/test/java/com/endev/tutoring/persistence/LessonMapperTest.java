@@ -5,10 +5,27 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
+import java.util.UUID;
+
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class LessonMapperTest {
+
+    @Test
+    void entityGetsTheGivenColumns() {
+        UUID id = UUID.randomUUID();
+
+        LessonEntity lesson = LessonMapper.toEntity(id, "LES-2026-0042", LessonStatus.CONFIRMED, "Algebra", "Dana");
+
+        assertAll(
+                () -> assertEquals(id, lesson.getId()),
+                () -> assertEquals("LES-2026-0042", lesson.getBusinessKey()),
+                () -> assertEquals("CONFIRMED", lesson.getStatus()),
+                () -> assertEquals("Algebra", lesson.getSubject()),
+                () -> assertEquals("Dana", lesson.getTutor()));
+    }
 
     @Test
     void mapsEveryStatusToTheColumnValue() {

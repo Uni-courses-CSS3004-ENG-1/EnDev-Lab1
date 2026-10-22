@@ -68,4 +68,25 @@ class SchemaTest {
         assertThrows(DataIntegrityViolationException.class,
                 () -> jdbc.update(insert, UUID.randomUUID(), businessKey, "CONFIRMED", "Algebra"));
     }
+
+    // an INSERT written before V2 does not name tutor; the default fills it, as it filled old rows
+    @Test
+    void rowWithoutTutorGetsTheDefault() {
+        jdbc.update("""
+                INSERT INTO lesson (id, business_key, status, subject)
+                VALUES (?, ?, ?, ?)
+                """, UUID.randomUUID(), "LES-2026-0042", "REQUESTED", "Algebra");
+
+        assertEquals("UNASSIGNED", jdbc.queryForObject(
+                "SELECT tutor FROM lesson WHERE business_key = ?", String.class, "LES-2026-0042"));
+    }
+
+    // the default only applies when the column is left out; an explicit null is rejected
+    @Test
+    void nullTutorIsRejected() {
+        assertThrows(DataIntegrityViolationException.class, () -> jdbc.update("""
+                INSERT INTO lesson (id, business_key, status, subject, tutor)
+                VALUES (?, ?, ?, ?, ?)
+                """, UUID.randomUUID(), "LES-2026-0042", "REQUESTED", "Algebra", null));
+    }
 }
