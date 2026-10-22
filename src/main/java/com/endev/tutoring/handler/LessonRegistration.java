@@ -39,6 +39,7 @@ public class LessonRegistration {
 
         try {
             lessons.insert(LessonMapper.toEntity(id, lesson.value(), LessonStatus.REQUESTED, subject, tutor));
+            // Flush inside the try: otherwise the INSERT runs at commit, outside this catch.
             lessons.flush();
         } catch (DataIntegrityViolationException e) {
             throwDuplicateOrRethrow(e, lesson);
@@ -52,6 +53,7 @@ public class LessonRegistration {
                     "Algebra", "Dana"));
             lessons.insert(LessonMapper.toEntity(UUID.randomUUID(), lesson.value(), LessonStatus.REQUESTED,
                     "Algebra again", "Dana"));
+            // Flush inside the try so the duplicate reaches this method before the transaction ends.
             lessons.flush();
         } catch (DataIntegrityViolationException e) {
             throwDuplicateOrRethrow(e, lesson);
@@ -64,6 +66,7 @@ public class LessonRegistration {
     }
 
     private void throwDuplicateOrRethrow(DataIntegrityViolationException e, LessonId lesson) {
+        // Only PostgreSQL's unique-key SQLState is a duplicate lesson; other integrity errors stay errors.
         Throwable cause = e.getMostSpecificCause();
         if (cause instanceof SQLException sql && "23505".equals(sql.getSQLState())) {
             throw new DuplicateLesson(lesson.value());
