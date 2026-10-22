@@ -16,8 +16,6 @@ import org.springframework.test.context.ContextConfiguration;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.dao.DataIntegrityViolationException;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -38,9 +36,8 @@ class LessonJpaTest {
     private JdbcTemplate jdbc;
 
     @BeforeEach
-    void recreateSchema() throws Exception {
-        jdbc.execute("DROP TABLE IF EXISTS lesson");
-        jdbc.execute(Files.readString(Path.of("src/main/resources/db/schema.sql")));
+    void cleanRows() {
+        jdbc.update("DELETE FROM lesson");
     }
 
     @Test
