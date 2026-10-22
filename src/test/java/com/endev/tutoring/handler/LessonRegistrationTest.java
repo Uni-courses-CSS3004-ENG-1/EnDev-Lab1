@@ -57,8 +57,8 @@ class LessonRegistrationTest {
             UUID id1 = UUID.randomUUID();
             UUID id2 = UUID.randomUUID();
 
-            registration.register(id1, LESSON, "Algebra");
-            assertThrows(DuplicateLesson.class, () -> registration.register(id2, LESSON, "Again"));
+            registration.register(id1, LESSON, "Algebra", "Dana");
+            assertThrows(DuplicateLesson.class, () -> registration.register(id2, LESSON, "Again", "Dana"));
             assertEquals(1, lessons.count(LESSON.value()));
         }
     }
@@ -69,7 +69,7 @@ class LessonRegistrationTest {
 
         @Test
         void commitsARequestedLesson() {
-            registration.register(UUID.randomUUID(), LESSON, "Algebra");
+            registration.register(UUID.randomUUID(), LESSON, "Algebra", "Dana");
 
             assertAll(
                     () -> assertEquals(1, lessons.count(LESSON.value())),
@@ -78,10 +78,10 @@ class LessonRegistrationTest {
 
         @Test
         void duplicateMessageNamesBusinessKey() {
-            registration.register(UUID.randomUUID(), LESSON, "Algebra");
+            registration.register(UUID.randomUUID(), LESSON, "Algebra", "Dana");
 
             DuplicateLesson duplicate = assertThrows(DuplicateLesson.class,
-                    () -> registration.register(UUID.randomUUID(), LESSON, "Again"));
+                    () -> registration.register(UUID.randomUUID(), LESSON, "Again", "Dana"));
 
             assertEquals("duplicate lesson: LES-2026-0042", duplicate.getMessage());
         }
@@ -89,7 +89,23 @@ class LessonRegistrationTest {
         @Test
         void blankSubjectIsRejectedWithoutWriting() {
             assertThrows(IllegalArgumentException.class,
-                    () -> registration.register(UUID.randomUUID(), LESSON, "  "));
+                    () -> registration.register(UUID.randomUUID(), LESSON, "  ", "Dana"));
+
+            assertEquals(0, lessons.count(LESSON.value()));
+        }
+
+        @Test
+        void tutorIsStored() {
+            registration.register(UUID.randomUUID(), LESSON, "Algebra", "Dana");
+
+            assertEquals("Dana", jdbc.queryForObject(
+                    "SELECT tutor FROM lesson WHERE business_key = ?", String.class, LESSON.value()));
+        }
+
+        @Test
+        void blankTutorIsRejectedWithoutWriting() {
+            assertThrows(IllegalArgumentException.class,
+                    () -> registration.register(UUID.randomUUID(), LESSON, "Algebra", " "));
 
             assertEquals(0, lessons.count(LESSON.value()));
         }
@@ -98,11 +114,13 @@ class LessonRegistrationTest {
         void missingArgumentsAreRejected() {
             assertAll(
                     () -> assertThrows(IllegalArgumentException.class,
-                            () -> registration.register(null, LESSON, "Algebra")),
+                            () -> registration.register(null, LESSON, "Algebra", "Dana")),
                     () -> assertThrows(IllegalArgumentException.class,
-                            () -> registration.register(UUID.randomUUID(), null, "Algebra")),
+                            () -> registration.register(UUID.randomUUID(), null, "Algebra", "Dana")),
                     () -> assertThrows(IllegalArgumentException.class,
-                            () -> registration.register(UUID.randomUUID(), LESSON, null)));
+                            () -> registration.register(UUID.randomUUID(), LESSON, null, "Dana")),
+                    () -> assertThrows(IllegalArgumentException.class,
+                            () -> registration.register(UUID.randomUUID(), LESSON, "Algebra", null)));
         }
     }
 }

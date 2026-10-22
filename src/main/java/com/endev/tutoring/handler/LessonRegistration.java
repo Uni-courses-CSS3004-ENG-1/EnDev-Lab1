@@ -3,7 +3,6 @@ package com.endev.tutoring.handler;
 import com.endev.tutoring.domain.DuplicateLesson;
 import com.endev.tutoring.domain.LessonId;
 import com.endev.tutoring.domain.LessonStatus;
-import com.endev.tutoring.persistence.LessonEntity;
 import com.endev.tutoring.persistence.LessonJpa;
 import com.endev.tutoring.persistence.LessonMapper;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -23,7 +22,7 @@ public class LessonRegistration {
     }
 
     @Transactional
-    public void register(UUID id, LessonId lesson, String subject) {
+    public void register(UUID id, LessonId lesson, String subject, String tutor) {
         if (id == null) {
             throw new IllegalArgumentException("Lesson database id must not be null");
         }
@@ -33,9 +32,13 @@ public class LessonRegistration {
         if (subject == null || subject.isBlank()) {
             throw new IllegalArgumentException("Lesson subject must not be blank");
         }
+        // the column is NOT NULL, and Hibernate would send a null instead of the default
+        if (tutor == null || tutor.isBlank()) {
+            throw new IllegalArgumentException("Lesson tutor must not be blank");
+        }
 
         try {
-            lessons.insert(LessonMapper.toEntity(id, lesson.value(), LessonStatus.REQUESTED, subject));
+            lessons.insert(LessonMapper.toEntity(id, lesson.value(), LessonStatus.REQUESTED, subject, tutor));
             lessons.flush();
         } catch (DataIntegrityViolationException e) {
             throwDuplicateOrRethrow(e, lesson);
@@ -46,9 +49,9 @@ public class LessonRegistration {
     public void insertTwice(LessonId lesson) {
         try {
             lessons.insert(LessonMapper.toEntity(UUID.randomUUID(), lesson.value(), LessonStatus.REQUESTED,
-                    "Algebra"));
+                    "Algebra", "Dana"));
             lessons.insert(LessonMapper.toEntity(UUID.randomUUID(), lesson.value(), LessonStatus.REQUESTED,
-                    "Algebra again"));
+                    "Algebra again", "Dana"));
             lessons.flush();
         } catch (DataIntegrityViolationException e) {
             throwDuplicateOrRethrow(e, lesson);

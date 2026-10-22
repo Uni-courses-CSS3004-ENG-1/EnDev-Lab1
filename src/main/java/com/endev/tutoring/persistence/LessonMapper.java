@@ -9,12 +9,14 @@ public final class LessonMapper {
     private LessonMapper() {
     }
 
-    public static LessonEntity toEntity(UUID id, String businessKey, LessonStatus status, String subject) {
+    public static LessonEntity toEntity(UUID id, String businessKey, LessonStatus status, String subject,
+                                        String tutor) {
         LessonEntity lesson = new LessonEntity();
         lesson.setId(id);
         lesson.setBusinessKey(businessKey);
         lesson.setStatus(toText(status));
         lesson.setSubject(subject);
+        lesson.setTutor(tutor);
         return lesson;
     }
 

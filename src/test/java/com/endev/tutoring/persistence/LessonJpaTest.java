@@ -93,6 +93,6 @@ class LessonJpaTest {
     }
 
     private static LessonEntity lesson(String businessKey, LessonStatus status) {
-        return LessonMapper.toEntity(UUID.randomUUID(), businessKey, status, "Algebra");
+        return LessonMapper.toEntity(UUID.randomUUID(), businessKey, status, "Algebra", "Dana");
     }
 }
