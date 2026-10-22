@@ -3,19 +3,22 @@ package com.endev.tutoring.handler;
 import com.endev.tutoring.domain.DuplicateLesson;
 import com.endev.tutoring.domain.LessonId;
 import com.endev.tutoring.domain.LessonStatus;
-import com.endev.tutoring.persistence.LessonJdbc;
-import org.springframework.dao.DuplicateKeyException;
+import com.endev.tutoring.persistence.LessonEntity;
+import com.endev.tutoring.persistence.LessonJpa;
+import com.endev.tutoring.persistence.LessonMapper;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.sql.SQLException;
 import java.util.UUID;
 
 @Service
 public class LessonRegistration {
 
-    private final LessonJdbc lessons;
+    private final LessonJpa lessons;
 
-    public LessonRegistration(LessonJdbc lessons) {
+    public LessonRegistration(LessonJpa lessons) {
         this.lessons = lessons;
     }
 
@@ -32,21 +35,36 @@ public class LessonRegistration {
         }
 
         try {
-            lessons.insert(id, lesson.value(), LessonStatus.REQUESTED, subject);
-        } catch (DuplicateKeyException e) {
-            // Only a duplicate-key error becomes DuplicateLesson; CHECK and NOT NULL errors do not.
-            throw new DuplicateLesson(lesson.value());
+            lessons.insert(LessonMapper.toEntity(id, lesson.value(), LessonStatus.REQUESTED, subject));
+            lessons.flush();
+        } catch (DataIntegrityViolationException e) {
+            throwDuplicateOrRethrow(e, lesson);
         }
     }
 
     @Transactional
     public void insertTwice(LessonId lesson) {
         try {
-            lessons.insert(UUID.randomUUID(), lesson.value(), LessonStatus.REQUESTED, "Algebra");
-            lessons.insert(UUID.randomUUID(), lesson.value(), LessonStatus.REQUESTED, "Algebra again");
-        } catch (DuplicateKeyException e) {
-            // Only a duplicate-key error becomes DuplicateLesson; CHECK and NOT NULL errors do not.
+            lessons.insert(LessonMapper.toEntity(UUID.randomUUID(), lesson.value(), LessonStatus.REQUESTED,
+                    "Algebra"));
+            lessons.insert(LessonMapper.toEntity(UUID.randomUUID(), lesson.value(), LessonStatus.REQUESTED,
+                    "Algebra again"));
+            lessons.flush();
+        } catch (DataIntegrityViolationException e) {
+            throwDuplicateOrRethrow(e, lesson);
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public LessonStatus status(LessonId lesson) {
+        return LessonMapper.toStatus(lessons.statusText(lesson.value()));
+    }
+
+    private void throwDuplicateOrRethrow(DataIntegrityViolationException e, LessonId lesson) {
+        Throwable cause = e.getMostSpecificCause();
+        if (cause instanceof SQLException sql && "23505".equals(sql.getSQLState())) {
             throw new DuplicateLesson(lesson.value());
         }
+        throw e;
     }
 }

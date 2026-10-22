@@ -4,7 +4,7 @@ import com.endev.tutoring.config.Application;
 import com.endev.tutoring.domain.DuplicateLesson;
 import com.endev.tutoring.domain.LessonId;
 import com.endev.tutoring.domain.LessonStatus;
-import com.endev.tutoring.persistence.LessonJdbc;
+import com.endev.tutoring.persistence.LessonJpa;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,7 +25,7 @@ class LessonRegistrationTest {
     private LessonRegistration registration;
 
     @Autowired
-    private LessonJdbc lessons;
+    private LessonJpa lessons;
 
     @Autowired
     private JdbcTemplate jdbc;
@@ -59,7 +59,7 @@ class LessonRegistrationTest {
         registration.register(UUID.randomUUID(), new LessonId("LES-2026-0042"), "Algebra");
 
         assertEquals(1, lessons.count("LES-2026-0042"));
-        assertEquals(LessonStatus.REQUESTED, lessons.status("LES-2026-0042"));
+        assertEquals(LessonStatus.REQUESTED, registration.status(new LessonId("LES-2026-0042")));
     }
 
     @Test
