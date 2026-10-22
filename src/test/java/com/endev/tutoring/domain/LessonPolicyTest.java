@@ -6,6 +6,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -46,9 +47,11 @@ class LessonPolicyTest {
         assertEquals("An unpaid lesson cannot be completed", e.getMessage());
     }
 
+    // assertAll reports both sides, even when the first one fails
     @Test
     void nullStatusIsRejected() {
-        assertThrows(IllegalArgumentException.class, () -> policy.move(null, LessonStatus.CONFIRMED));
-        assertThrows(IllegalArgumentException.class, () -> policy.move(LessonStatus.REQUESTED, null));
+        assertAll(
+                () -> assertThrows(IllegalArgumentException.class, () -> policy.move(null, LessonStatus.CONFIRMED)),
+                () -> assertThrows(IllegalArgumentException.class, () -> policy.move(LessonStatus.REQUESTED, null)));
     }
 }
