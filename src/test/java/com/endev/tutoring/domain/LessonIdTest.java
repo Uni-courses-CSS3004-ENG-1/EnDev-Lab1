@@ -1,5 +1,6 @@
 package com.endev.tutoring.domain;
 
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
@@ -21,5 +22,12 @@ class LessonIdTest {
     @ValueSource(strings = {"   ", "\t", "\n"})
     void nullOrBlankIdIsRejected(String value) {
         assertThrows(IllegalArgumentException.class, () -> new LessonId(value));
+    }
+
+    // the README shows ids like LES-2026-0042, but LessonId only rejects blanks today
+    @Disabled("LessonId does not check the LES-yyyy-nnnn format yet")
+    @Test
+    void malformedIdIsRejected() {
+        assertThrows(IllegalArgumentException.class, () -> new LessonId("lesson 42"));
     }
 }

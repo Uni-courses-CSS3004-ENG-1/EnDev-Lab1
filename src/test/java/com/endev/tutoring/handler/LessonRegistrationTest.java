@@ -6,6 +6,8 @@ import com.endev.tutoring.domain.LessonId;
 import com.endev.tutoring.domain.LessonStatus;
 import com.endev.tutoring.persistence.LessonJpa;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -15,11 +17,16 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+// Integration test: the whole app against PostgreSQL. Not @Transactional,
+// so every count is a separate query that sees only committed rows.
 @SpringBootTest(classes = Application.class)
 class LessonRegistrationTest {
+
+    private static final LessonId LESSON = new LessonId("LES-2026-0042");
 
     @Autowired
     private LessonRegistration registration;
@@ -36,48 +43,69 @@ class LessonRegistrationTest {
         jdbc.execute(Files.readString(Path.of("src/main/resources/db/schema.sql")));
     }
 
-    @Test
-    void secondStatementRollsBack() {
-        assertThrows(DuplicateLesson.class,
-                () -> registration.insertTwice(new LessonId("LES-2026-0042")));
-        assertEquals(0, lessons.count("LES-2026-0042"));
+    @Nested
+    @DisplayName("the two counts")
+    class TwoCounts {
+
+        // one transaction, two inserts: the second fails, so the first is rolled back too
+        @Test
+        void secondStatementRollsBack() {
+            assertThrows(DuplicateLesson.class, () -> registration.insertTwice(LESSON));
+            assertEquals(0, lessons.count(LESSON.value()));
+        }
+
+        // two transactions: the second fails, the first already committed
+        @Test
+        void secondRequestKeepsTheFirst() {
+            UUID id1 = UUID.randomUUID();
+            UUID id2 = UUID.randomUUID();
+
+            registration.register(id1, LESSON, "Algebra");
+            assertThrows(DuplicateLesson.class, () -> registration.register(id2, LESSON, "Again"));
+            assertEquals(1, lessons.count(LESSON.value()));
+        }
     }
 
-    @Test
-    void secondRequestKeepsTheFirst() {
-        UUID id1 = UUID.randomUUID();
-        UUID id2 = UUID.randomUUID();
+    @Nested
+    @DisplayName("register")
+    class Register {
 
-        registration.register(id1, new LessonId("LES-2026-0042"), "Algebra");
-        assertThrows(DuplicateLesson.class,
-                () -> registration.register(id2, new LessonId("LES-2026-0042"), "Again"));
-        assertEquals(1, lessons.count("LES-2026-0042"));
-    }
+        @Test
+        void commitsARequestedLesson() {
+            registration.register(UUID.randomUUID(), LESSON, "Algebra");
 
-    @Test
-    void oneRegisterCommitsRequestedLesson() {
-        registration.register(UUID.randomUUID(), new LessonId("LES-2026-0042"), "Algebra");
+            assertAll(
+                    () -> assertEquals(1, lessons.count(LESSON.value())),
+                    () -> assertEquals(LessonStatus.REQUESTED, registration.status(LESSON)));
+        }
 
-        assertEquals(1, lessons.count("LES-2026-0042"));
-        assertEquals(LessonStatus.REQUESTED, registration.status(new LessonId("LES-2026-0042")));
-    }
+        @Test
+        void duplicateMessageNamesBusinessKey() {
+            registration.register(UUID.randomUUID(), LESSON, "Algebra");
 
-    @Test
-    void duplicateLessonMessageNamesBusinessKey() {
-        LessonId lesson = new LessonId("LES-2026-0042");
-        registration.register(UUID.randomUUID(), lesson, "Algebra");
+            DuplicateLesson duplicate = assertThrows(DuplicateLesson.class,
+                    () -> registration.register(UUID.randomUUID(), LESSON, "Again"));
 
-        DuplicateLesson duplicate = assertThrows(DuplicateLesson.class,
-                () -> registration.register(UUID.randomUUID(), lesson, "Again"));
+            assertEquals("duplicate lesson: LES-2026-0042", duplicate.getMessage());
+        }
 
-        assertEquals("duplicate lesson: LES-2026-0042", duplicate.getMessage());
-    }
+        @Test
+        void blankSubjectIsRejectedWithoutWriting() {
+            assertThrows(IllegalArgumentException.class,
+                    () -> registration.register(UUID.randomUUID(), LESSON, "  "));
 
-    @Test
-    void blankSubjectIsRejectedWithoutWriting() {
-        assertThrows(IllegalArgumentException.class,
-                () -> registration.register(UUID.randomUUID(), new LessonId("LES-2026-0042"), "  "));
+            assertEquals(0, lessons.count(LESSON.value()));
+        }
 
-        assertEquals(0, lessons.count("LES-2026-0042"));
+        @Test
+        void missingArgumentsAreRejected() {
+            assertAll(
+                    () -> assertThrows(IllegalArgumentException.class,
+                            () -> registration.register(null, LESSON, "Algebra")),
+                    () -> assertThrows(IllegalArgumentException.class,
+                            () -> registration.register(UUID.randomUUID(), null, "Algebra")),
+                    () -> assertThrows(IllegalArgumentException.class,
+                            () -> registration.register(UUID.randomUUID(), LESSON, null)));
+        }
     }
 }
