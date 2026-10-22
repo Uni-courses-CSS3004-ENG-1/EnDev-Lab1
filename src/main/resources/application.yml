@@ -3,3 +3,8 @@ spring:
     url: jdbc:postgresql://localhost:5432/css
     username: css
     password: css
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    show-sql: true

@@ -9,6 +9,7 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.InvalidDataAccessApiUsageException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.nio.file.Files;
@@ -16,6 +17,7 @@ import java.nio.file.Path;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 // Runs against the classroom PostgreSQL. Each insert really commits for the test.
@@ -80,8 +82,10 @@ class LessonJdbcTest {
         jdbc.update("INSERT INTO lesson (id, business_key, status, subject) VALUES (?, ?, ?, ?)",
                 UUID.randomUUID(), "LES-2026-0042", "PAID", "Algebra");
 
-        IllegalStateException e = assertThrows(IllegalStateException.class,
+        // with JPA on the classpath, @Repository translates IllegalStateException into a Spring exception
+        InvalidDataAccessApiUsageException e = assertThrows(InvalidDataAccessApiUsageException.class,
                 () -> lessons.status("LES-2026-0042"));
-        assertEquals("Unknown lesson status in the database: PAID", e.getMessage());
+        assertInstanceOf(IllegalStateException.class, e.getCause());
+        assertEquals("Unknown lesson status in the database: PAID", e.getCause().getMessage());
     }
 }
