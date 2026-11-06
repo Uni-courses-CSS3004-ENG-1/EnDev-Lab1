@@ -2,7 +2,9 @@ package com.endev.tutoring.handler;
 
 import com.endev.tutoring.config.Application;
 import com.endev.tutoring.domain.DuplicateLesson;
+import com.endev.tutoring.domain.Lesson;
 import com.endev.tutoring.domain.LessonId;
+import com.endev.tutoring.domain.LessonNotFound;
 import com.endev.tutoring.domain.LessonStatus;
 import com.endev.tutoring.persistence.LessonJpa;
 import org.junit.jupiter.api.BeforeEach;
@@ -60,6 +62,63 @@ class LessonRegistrationTest {
             registration.register(id1, LESSON, "Algebra", "Dana");
             assertThrows(DuplicateLesson.class, () -> registration.register(id2, LESSON, "Again", "Dana"));
             assertEquals(1, lessons.count(LESSON.value()));
+        }
+    }
+
+    @Nested
+    @DisplayName("create and find by UUID")
+    class CreateAndFind {
+
+        @Test
+        void createdLessonIsReadBackByItsUuid() {
+            Lesson created = registration.create(LESSON, "Algebra");
+
+            Lesson found = registration.find(created.id());
+
+            assertAll(
+                    () -> assertEquals(created, found),
+                    () -> assertEquals(LessonStatus.REQUESTED, found.status()),
+                    () -> assertEquals(1, lessons.count(LESSON.value())));
+        }
+
+        @Test
+        void createLeavesTheTutorAtTheColumnDefault() {
+            registration.create(LESSON, "Algebra");
+
+            assertEquals("UNASSIGNED", jdbc.queryForObject(
+                    "SELECT tutor FROM lesson WHERE business_key = ?", String.class, LESSON.value()));
+        }
+
+        // the same business key twice: the first committed row stays
+        @Test
+        void secondCreateOfTheSameKeyKeepsTheFirst() {
+            Lesson first = registration.create(LESSON, "Algebra");
+
+            assertThrows(DuplicateLesson.class, () -> registration.create(LESSON, "Again"));
+
+            assertAll(
+                    () -> assertEquals(1, lessons.count(LESSON.value())),
+                    () -> assertEquals("Algebra", registration.find(first.id()).subject()));
+        }
+
+        @Test
+        void unknownUuidIsNotFound() {
+            UUID missing = UUID.randomUUID();
+
+            LessonNotFound e = assertThrows(LessonNotFound.class, () -> registration.find(missing));
+
+            assertEquals("lesson not found: " + missing, e.getMessage());
+        }
+
+        @Test
+        void findDoesNotWrite() {
+            Lesson created = registration.create(LESSON, "Algebra");
+
+            registration.find(created.id());
+
+            assertAll(
+                    () -> assertEquals(1, lessons.count(LESSON.value())),
+                    () -> assertEquals(LessonStatus.REQUESTED, registration.status(LESSON)));
         }
     }
 

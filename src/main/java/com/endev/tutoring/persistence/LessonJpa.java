@@ -3,6 +3,9 @@ package com.endev.tutoring.persistence;
 import jakarta.persistence.EntityManager;
 import org.springframework.stereotype.Repository;
 
+import java.util.Optional;
+import java.util.UUID;
+
 @Repository
 public class LessonJpa {
 
@@ -34,6 +37,11 @@ public class LessonJpa {
                 .getResultStream()
                 .findFirst()
                 .orElse(null);
+    }
+
+    // a plain primary-key lookup: no flush, no write
+    public Optional<LessonEntity> find(UUID id) {
+        return Optional.ofNullable(em.find(LessonEntity.class, id));
     }
 
     public void flush() {

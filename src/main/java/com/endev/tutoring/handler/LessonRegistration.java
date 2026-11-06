@@ -1,7 +1,9 @@
 package com.endev.tutoring.handler;
 
 import com.endev.tutoring.domain.DuplicateLesson;
+import com.endev.tutoring.domain.Lesson;
 import com.endev.tutoring.domain.LessonId;
+import com.endev.tutoring.domain.LessonNotFound;
 import com.endev.tutoring.domain.LessonStatus;
 import com.endev.tutoring.persistence.LessonJpa;
 import com.endev.tutoring.persistence.LessonMapper;
@@ -14,6 +16,9 @@ import java.util.UUID;
 
 @Service
 public class LessonRegistration {
+
+    // the V2 column default: a new request has no tutor yet
+    static final String NO_TUTOR_YET = "UNASSIGNED";
 
     private final LessonJpa lessons;
 
@@ -44,6 +49,25 @@ public class LessonRegistration {
         } catch (DataIntegrityViolationException e) {
             throwDuplicateOrRethrow(e, lesson);
         }
+    }
+
+    // A new request: Java picks the UUID, the row starts REQUESTED, and the write is the Lab 3 register.
+    @Transactional
+    public Lesson create(LessonId lesson, String subject) {
+        UUID id = UUID.randomUUID();
+        register(id, lesson, subject, NO_TUTOR_YET);
+        return new Lesson(id, lesson, LessonStatus.REQUESTED, subject);
+    }
+
+    // Reads one row by its UUID. It never registers, moves or flushes.
+    @Transactional(readOnly = true)
+    public Lesson find(UUID id) {
+        if (id == null) {
+            throw new IllegalArgumentException("Lesson database id must not be null");
+        }
+        return lessons.find(id)
+                .map(LessonMapper::toLesson)
+                .orElseThrow(() -> new LessonNotFound(id));
     }
 
     @Transactional
