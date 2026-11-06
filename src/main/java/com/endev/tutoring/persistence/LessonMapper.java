@@ -1,5 +1,7 @@
 package com.endev.tutoring.persistence;
 
+import com.endev.tutoring.domain.Lesson;
+import com.endev.tutoring.domain.LessonId;
 import com.endev.tutoring.domain.LessonStatus;
 
 import java.util.UUID;
@@ -18,6 +20,12 @@ public final class LessonMapper {
         lesson.setSubject(subject);
         lesson.setTutor(tutor);
         return lesson;
+    }
+
+    // the entity never leaves persistence; callers get the domain view
+    public static Lesson toLesson(LessonEntity lesson) {
+        return new Lesson(lesson.getId(), new LessonId(lesson.getBusinessKey()), toStatus(lesson.getStatus()),
+                lesson.getSubject());
     }
 
     public static String toText(LessonStatus status) {

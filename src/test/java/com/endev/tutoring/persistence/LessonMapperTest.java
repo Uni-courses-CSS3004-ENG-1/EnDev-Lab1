@@ -1,5 +1,7 @@
 package com.endev.tutoring.persistence;
 
+import com.endev.tutoring.domain.Lesson;
+import com.endev.tutoring.domain.LessonId;
 import com.endev.tutoring.domain.LessonStatus;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -25,6 +27,20 @@ class LessonMapperTest {
                 () -> assertEquals("CONFIRMED", lesson.getStatus()),
                 () -> assertEquals("Algebra", lesson.getSubject()),
                 () -> assertEquals("Dana", lesson.getTutor()));
+    }
+
+    @Test
+    void entityBecomesTheDomainLesson() {
+        UUID id = UUID.randomUUID();
+        LessonEntity entity = LessonMapper.toEntity(id, "LES-2026-0042", LessonStatus.REQUESTED, "Algebra", "Dana");
+
+        Lesson lesson = LessonMapper.toLesson(entity);
+
+        assertAll(
+                () -> assertEquals(id, lesson.id()),
+                () -> assertEquals(new LessonId("LES-2026-0042"), lesson.businessKey()),
+                () -> assertEquals(LessonStatus.REQUESTED, lesson.status()),
+                () -> assertEquals("Algebra", lesson.subject()));
     }
 
     @Test
