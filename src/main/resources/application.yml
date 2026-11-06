@@ -13,3 +13,6 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: false
     out-of-order: false
+
+springdoc:
+  override-with-generic-response: false
