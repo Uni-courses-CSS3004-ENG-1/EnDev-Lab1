@@ -2,6 +2,13 @@ package com.endev.tutoring.handler;
 
 import com.endev.tutoring.domain.Lesson;
 import com.endev.tutoring.domain.LessonId;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.headers.Header;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -16,10 +23,10 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 import java.net.URI;
 import java.util.UUID;
 
-// HTTP adapter for lessons. The version is in the path; the path id is the row's UUID,
-// the business key stays in the body. It never touches the EntityManager.
+// HTTP adapter for lessons. The entity remains behind the registration service.
 @RestController
 @RequestMapping(path = "/api/v1/lessons", produces = MediaType.APPLICATION_JSON_VALUE)
+@Tag(name = "Lessons", description = "Create lessons and find them by UUID")
 public class LessonController {
 
     private final LessonRegistration registration;
@@ -28,8 +35,21 @@ public class LessonController {
         this.registration = registration;
     }
 
-    // @Valid runs before this method, so a bad body never reaches the service
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "Create a lesson")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Lesson created",
+                    headers = @Header(name = "Location", description = "URI of the created lesson",
+                            schema = @Schema(type = "string", format = "uri")),
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = LessonResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid lesson request",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ApiError.class))),
+            @ApiResponse(responseCode = "409", description = "Business key already exists",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ApiError.class)))
+    })
     public ResponseEntity<LessonResponse> create(@Valid @RequestBody CreateLessonRequest request) {
         Lesson lesson = registration.create(new LessonId(request.businessKey()), request.subject());
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
@@ -39,9 +59,20 @@ public class LessonController {
         return ResponseEntity.created(location).body(LessonResponse.from(lesson));
     }
 
-    // a read: no register, no move, no flush
     @GetMapping("/{id}")
-    public LessonResponse get(@PathVariable UUID id) {
-        return LessonResponse.from(registration.find(id));
+    @Operation(summary = "Find a lesson by its UUID")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Lesson found",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = LessonResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Identifier is not a UUID",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ApiError.class))),
+            @ApiResponse(responseCode = "404", description = "Lesson not found",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ApiError.class)))
+    })
+    public ResponseEntity<LessonResponse> get(@PathVariable(name = "id") UUID id) {
+        return ResponseEntity.ok(LessonResponse.from(registration.find(id)));
     }
 }
