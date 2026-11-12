@@ -1,0 +1,12 @@
+# The laptop: PostgreSQL from compose.yaml and a payment provider stub on port 9090.
+# css/css is the classroom default from Lab 3, not a real secret.
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/css
+    username: css
+    password: css
+
+app:
+  downstream:
+    base-url: http://localhost:9090
+    timeout: 2s
