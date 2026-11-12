@@ -1,6 +1,8 @@
 # Shared by every profile. No URL and no password live here: they belong to
 # application-dev.yaml (the laptop) and application-prod.yaml (env vars).
 spring:
+  application:
+    name: tutoring-marketplace
   profiles:
     # a boot with no flag uses the laptop database; production sets SPRING_PROFILES_ACTIVE=prod
     default: dev
@@ -24,3 +26,21 @@ server:
     include-message: never
     include-binding-errors: never
     include-exception: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+      show-components: never
+  info:
+    env:
+      enabled: true
+
+info:
+  app:
+    name: Tutoring marketplace
+    description: Match students with tutors, schedule lessons and take a commission per lesson

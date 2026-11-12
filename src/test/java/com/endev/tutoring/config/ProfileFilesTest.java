@@ -52,6 +52,14 @@ class ProfileFilesTest {
         }
 
         @Test
+        void exposesOnlyHealthAndInfoAndHidesHealthDetails() throws IOException {
+            PropertySource<?> shared = yaml("application.yaml");
+            assertAll(
+                    () -> assertEquals("health,info", text(shared, "management.endpoints.web.exposure.include")),
+                    () -> assertEquals("never", text(shared, "management.endpoint.health.show-details")));
+        }
+
+        @Test
         void disablesBootErrorDetails() throws IOException {
             PropertySource<?> shared = yaml("application.yaml");
             assertAll(
