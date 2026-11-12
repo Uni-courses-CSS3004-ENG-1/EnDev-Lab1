@@ -50,6 +50,16 @@ class ProfileFilesTest {
                     () -> assertEquals("validate", text(shared, "spring.jpa.hibernate.ddl-auto")),
                     () -> assertEquals("false", text(shared, "spring.jpa.open-in-view")));
         }
+
+        @Test
+        void disablesBootErrorDetails() throws IOException {
+            PropertySource<?> shared = yaml("application.yaml");
+            assertAll(
+                    () -> assertEquals("never", text(shared, "server.error.include-stacktrace")),
+                    () -> assertEquals("never", text(shared, "server.error.include-message")),
+                    () -> assertEquals("never", text(shared, "server.error.include-binding-errors")),
+                    () -> assertEquals("false", text(shared, "server.error.include-exception")));
+        }
     }
 
     @Nested
