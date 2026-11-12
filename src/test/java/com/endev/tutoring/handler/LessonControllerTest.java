@@ -20,8 +20,11 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.isEmptyOrNullString;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.matchesPattern;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -67,8 +70,11 @@ class LessonControllerTest {
                             .contentType(APPLICATION_JSON)
                             .content("{\"businessKey\":\"" + KEY + "\",\"subject\":\"Algebra\"}"))
                     .andExpect(status().isCreated())
-                    .andExpect(header().string("Location", containsString("/api/v1/lessons/")))
-                    .andExpect(jsonPath("$.businessKey", is(KEY)));
+                    .andExpect(header().string("Location", endsWith("/api/v1/lessons/" + ID)))
+                    .andExpect(jsonPath("$.id", is(ID.toString())))
+                    .andExpect(jsonPath("$.businessKey", is(KEY)))
+                    .andExpect(jsonPath("$.status", is("REQUESTED")))
+                    .andExpect(jsonPath("$.subject", is("Algebra")));
         }
 
         @Test
@@ -80,7 +86,22 @@ class LessonControllerTest {
             mvc.perform(post("/api/v1/lessons")
                             .contentType(APPLICATION_JSON)
                             .content("{\"businessKey\":\"" + KEY + "\",\"subject\":\"" + subject + "\"}"))
-                    .andExpect(status().isCreated());
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.subject", is(subject)));
+        }
+
+        @Test
+        void getByUuidReturnsTheLesson() throws Exception {
+            when(registration.find(ID))
+                    .thenReturn(new Lesson(ID, new LessonId(KEY), LessonStatus.REQUESTED, "Algebra"));
+
+            mvc.perform(get("/api/v1/lessons/{id}", ID))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.id", is(ID.toString())))
+                    .andExpect(jsonPath("$.businessKey", is(KEY)))
+                    .andExpect(jsonPath("$.status", is("REQUESTED")))
+                    .andExpect(jsonPath("$.subject", is("Algebra")));
+            verify(registration, never()).create(any(), any());
         }
     }
 
@@ -93,7 +114,16 @@ class LessonControllerTest {
             postJson("{\"businessKey\":\"" + KEY + "\",\"subject\":\" \"}")
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code", is("VALIDATION")))
-                    .andExpect(jsonPath("$.message", containsString("subject")));
+                    .andExpect(jsonPath("$.message", is("subject must not be blank")));
+            verify(registration, never()).create(any(), any());
+        }
+
+        @Test
+        void emptySubjectIsValidationError() throws Exception {
+            postJson("{\"businessKey\":\"" + KEY + "\",\"subject\":\"\"}")
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code", is("VALIDATION")))
+                    .andExpect(jsonPath("$.message", is("subject must not be blank")));
             verify(registration, never()).create(any(), any());
         }
 
@@ -102,7 +132,7 @@ class LessonControllerTest {
             postJson("{\"businessKey\":\"\",\"subject\":\"Algebra\"}")
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code", is("VALIDATION")))
-                    .andExpect(jsonPath("$.message", containsString("businessKey")));
+                    .andExpect(jsonPath("$.message", is("businessKey must not be blank")));
             verify(registration, never()).create(any(), any());
         }
 
@@ -110,7 +140,8 @@ class LessonControllerTest {
         void subjectLongerThan120IsRejected() throws Exception {
             postJson("{\"businessKey\":\"" + KEY + "\",\"subject\":\"" + "a".repeat(121) + "\"}")
                     .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.message", containsString("subject")));
+                    .andExpect(jsonPath("$.code", is("VALIDATION")))
+                    .andExpect(jsonPath("$.message", containsString("size must be between 0 and 120")));
             verify(registration, never()).create(any(), any());
         }
 
@@ -121,7 +152,9 @@ class LessonControllerTest {
             mvc.perform(get("/api/v1/lessons/{id}", ID))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.code", is("NOT_FOUND")))
-                    .andExpect(jsonPath("$.message", is("lesson not found: " + ID)));
+                    .andExpect(jsonPath("$.message", is("lesson not found: " + ID)))
+                    .andExpect(jsonPath("$.*", hasSize(3)))
+                    .andExpect(jsonPath("$.correlationId", not(isEmptyOrNullString())));
         }
 
         @Test
@@ -132,13 +165,16 @@ class LessonControllerTest {
             postJson("{\"businessKey\":\"" + KEY + "\",\"subject\":\"Algebra\"}")
                     .andExpect(status().isConflict())
                     .andExpect(jsonPath("$.code", is("DUPLICATE")))
-                    .andExpect(jsonPath("$.message", is("duplicate lesson: " + KEY)));
+                    .andExpect(jsonPath("$.message", is("duplicate lesson: " + KEY)))
+                    .andExpect(jsonPath("$.*", hasSize(3)))
+                    .andExpect(jsonPath("$.correlationId", not(isEmptyOrNullString())));
         }
 
         @Test
         void nonUuidPathIsValidationError() throws Exception {
             mvc.perform(get("/api/v1/lessons/LES-2026-0042"))
                     .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code", is("VALIDATION")))
                     .andExpect(jsonPath("$.message", is("id must be a UUID")));
             verify(registration, never()).find(any());
         }
@@ -180,6 +216,7 @@ class LessonControllerTest {
                             .header("X-Correlation-Id", correlationId)
                             .content("{\"businessKey\":\"\",\"subject\":\"Algebra\"}"))
                     .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code", is("VALIDATION")))
                     .andExpect(jsonPath("$.correlationId", is(correlationId)))
                     .andExpect(jsonPath("$.*", hasSize(3)));
         }

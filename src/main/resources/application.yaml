@@ -17,3 +17,10 @@ spring:
 
 springdoc:
   override-with-generic-response: false
+
+server:
+  error:
+    include-stacktrace: never
+    include-message: never
+    include-binding-errors: never
+    include-exception: false
