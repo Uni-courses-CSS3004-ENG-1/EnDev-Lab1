@@ -1,8 +1,9 @@
 # Tutoring marketplace
 
 This project is a small tutoring marketplace. A vendor sends a lesson, the application applies
-lesson rules, records the lesson in PostgreSQL, and coordinates payment with a port. The code uses
-Java 21, Spring Boot, Hibernate/JPA, Flyway, and PostgreSQL 16.
+lesson rules, records the lesson in PostgreSQL, and coordinates payment with a port. Other teams
+reach it through a versioned REST API under `/api/v1`. The code uses Java 21, Spring Boot 3.5,
+Hibernate/JPA, Flyway, springdoc-openapi, Spring Boot Actuator, and PostgreSQL 16.
 
 ## Core item
 
@@ -32,11 +33,15 @@ persistence -> handler
 
 client/
   LoggingPaymentClient
+  DownstreamProperties (@ConfigurationProperties "app.downstream")
 
 dto/
   VendorLessonPayload
 
 handler/
+  LessonController (@RestController, /api/v1/lessons)
+  CreateLessonRequest, LessonResponse, ApiError (JSON records)
+  ApiErrors (@RestControllerAdvice)
   LessonDemoRunner
   LessonRegistration
   LessonService
@@ -47,19 +52,22 @@ persistence/
   LessonMapper (plain final class)
 
 domain/
-  DuplicateLesson, LessonId, LessonPolicy, LessonStatus
+  DuplicateLesson, Lesson, LessonId, LessonNotFound, LessonPolicy, LessonStatus
   PaymentPort, Rule, TransitionRule, UnpaidCannotComplete
 
 config/
-  Application, RuleConfig
+  Application, ClientConfig, RuleConfig
 ```
 
-`domain` imports no Spring, no `java.sql` and no `jakarta.persistence`. `LessonEntity` is kept in
-`persistence`, so persistence annotations do not leak into the rules and value objects.
+`domain` imports no Spring, no `java.sql`, no `jakarta.persistence` and no `jakarta.validation`.
+`LessonEntity` is kept in `persistence`, so persistence annotations do not leak into the rules and
+value objects, and Jackson never sees it.
 
-`Application` starts the application and `RuleConfig` supplies the rule and payment wiring.
-`LessonRegistration` handles database writes. `LessonService` applies lesson rules and uses the
-`PaymentPort`; `LoggingPaymentClient` is the current adapter for that port.
+`Application` starts the application, `RuleConfig` supplies the rule wiring and `ClientConfig`
+registers the outbound settings. `LessonController` is the HTTP adapter: it chooses the status
+code and delegates to `LessonRegistration`, which handles database writes and reads.
+`LessonService` applies lesson rules and uses the `PaymentPort`; `LoggingPaymentClient` is the
+current adapter for that port.
 
 ## Storage
 
@@ -149,6 +157,131 @@ only committed rows. `REPEATABLE READ` keeps one transaction's snapshot stable; 
 also detects conflicts so the result is equivalent to a serial order. This project does not need
 either stricter level.
 
+## REST API
+
+The domain stays Java; HTTP is an adapter. Another team gets a URL, a JSON body and a status code.
+
+| Call | Meaning |
+|---|---|
+| `POST /api/v1/lessons` | Create one lesson |
+| `GET /api/v1/lessons/{id}` | Read that lesson by its UUID |
+
+The version sits in the path. The path id is the row's UUID from Lab 3; the business key stays in
+the body. There is no `PUT`, `PATCH`, `DELETE` or list endpoint in this lab, and a `GET` never
+registers, moves or flushes anything. The assignment's `title` is this product's `subject`.
+
+Create request (both fields required, `subject` at most 120 characters):
+
+```json
+{ "businessKey": "LES-2026-0042", "subject": "Algebra" }
+```
+
+A good create answers **201** with a `Location` header that is the `GET` for the new UUID:
+
+```text
+HTTP/1.1 201
+Location: http://localhost:8080/api/v1/lessons/ae61b8be-ee78-4768-8b15-cfea4c906bd3
+
+{"id":"ae61b8be-ee78-4768-8b15-cfea4c906bd3","businessKey":"LES-2026-0042","status":"REQUESTED","subject":"Algebra"}
+```
+
+`CreateLessonRequest` carries `@NotBlank` and `@Size(max = 120)` in the `handler` package, and
+`@Valid` runs before the service: a bad body never reaches `LessonRegistration`. `LessonResponse`
+is built from the domain `Lesson`, never from `LessonEntity`, so `tutor` and `created_at` stay off
+the wire. A new lesson starts as `REQUESTED` with the tutor `UNASSIGNED`; `status` is the same
+token the CHECK constraint stores.
+
+### Outcomes
+
+The status is the outcome. A 200 whose body hides an error would be a bug.
+
+| Situation | Status | `code` | `message` |
+|---|---|---|---|
+| Row inserted | 201 | — | body is the lesson |
+| Lesson found by UUID | 200 | — | body is the lesson |
+| `subject` or `businessKey` blank | 400 | `VALIDATION` | `subject must not be blank` |
+| `subject` longer than 120 | 400 | `VALIDATION` | `subject size must be between 0 and 120` |
+| Path id is not a UUID | 400 | `VALIDATION` | `id must be a UUID` |
+| Body is not JSON | 400 | `VALIDATION` | `body must be JSON` |
+| UUID parses and is not in the table | 404 | `NOT_FOUND` | `lesson not found: <uuid>` |
+| Business key already stored | 409 | `DUPLICATE` | `duplicate lesson: <business key>` |
+| Wrong `Content-Type` | 415 | `UNSUPPORTED` | `content type must be application/json` |
+| Unknown path / wrong method | 404 / 405 | `NOT_FOUND` / `METHOD_NOT_ALLOWED` | `no such path` / `method not allowed` |
+| A bug nobody mapped | 500 | `INTERNAL` | `unexpected error` |
+
+When several fields fail, the message names the first one by field name, so the answer is stable.
+
+409 is the Lab 3 `DuplicateLesson`, now visible to the caller. The first committed row stays:
+
+| After this call | Rows for that business key |
+|---|---|
+| 201 with a real subject | 1 |
+| 400 subject blank | unchanged (0 on a first attempt) |
+| 200 GET by UUID | unchanged |
+| 409 same key again | 1 |
+| 201 on a different key | 1 for each key |
+
+### Error body and correlation id
+
+Every failure body has exactly three fields:
+
+```json
+{ "code": "DUPLICATE", "message": "duplicate lesson: LES-2026-0042", "correlationId": "demo-1" }
+```
+
+`ApiErrors` is the only class that knows 400, 404, 409, 415 and 500. `LessonNotFound` and
+`DuplicateLesson` stay in `domain`, unchecked and without a Spring import. The advice reads
+`X-Correlation-Id`: if the caller sent one, the body repeats it; if it is missing or blank, a new
+UUID is minted. A 500 logs the exception with the correlation id, but the exception text and class
+name never go into the body.
+
+Boot's own error payload is switched off too, for anything that bypasses the advice:
+`server.error.include-stacktrace`, `include-message` and `include-binding-errors` are `never`, and
+`include-exception` is `false`.
+
+### Contract and versioning
+
+springdoc publishes the contract at `/v3/api-docs` and the UI at `/swagger-ui.html`. Create lists
+201, 400 and 409; get lists 200 and 404. `businessKey` and `subject` are required, and the response
+schema is `LessonResponse`, not the entity.
+
+| Still `/api/v1` | Needs `/api/v2`, v1 left alone |
+|---|---|
+| A new optional field old clients can ignore | Renaming `subject` |
+| Clearer message text | 201 becoming 200 without `Location` |
+| | A status token becoming a number |
+
+## Configuration and profiles
+
+Nothing that varies between a laptop and a server is a Java string. `src/main/java` contains no
+`jdbc:postgresql` and no `http://` literal; `ProfileFilesTest` fails if one appears.
+
+| File | Holds |
+|---|---|
+| `application.yaml` | What every run shares: `ddl-auto: validate`, `open-in-view: false`, Flyway, the error leak settings, actuator exposure, and `spring.profiles.default: dev`. No URL and no password. |
+| `application-dev.yaml` | The laptop: PostgreSQL `localhost:5432/css`, user and password `css` (the classroom default), payment provider at `http://localhost:9090` with a `2s` timeout. |
+| `application-prod.yaml` | Reads `CSS_DB_URL`, `CSS_DB_USER`, `CSS_DB_PASSWORD` and `CSS_DOWNSTREAM_URL` from the environment. No default secret. |
+
+A boot with no flag uses `dev`. Production sets `SPRING_PROFILES_ACTIVE=prod` and the variables;
+the committed files never set an active profile.
+
+`DownstreamProperties` binds `app.downstream.base-url` and `app.downstream.timeout` with
+`@ConfigurationProperties`. The timeout is a `Duration` (`2s`), not an int multiplied in Java. Both
+values are validated, so a profile without them fails at start-up rather than at the first payment.
+`ClientConfig` registers the type and `LoggingPaymentClient` receives it. No call is made yet:
+Lab 6 adds the HTTP call and enforces the timeout.
+
+## Actuator
+
+Only `health` and `info` are exposed, and health hides its details, so its payload never lists the
+datasource URL.
+
+| Call | Result |
+|---|---|
+| `GET /actuator/health` | **200** `{"status":"UP"}` |
+| `GET /actuator/info` | **200** with the product name |
+| `GET /actuator/env`, `/heapdump`, `/beans`, `/shutdown` | **404** `NOT_FOUND`, not exposed |
+
 ## Tests
 
 | Test class | Kind | What it proves |
@@ -168,6 +301,14 @@ either stricter level.
 | `LessonMapperTest` | Unit | Every status maps to and from its database word; unknown and null values fail. |
 | `SchemaTest` | `@SpringBootTest` integration | Database constraints and the V2 tutor default. |
 | `TransactionIsolationTest` | `@SpringBootTest` integration | PostgreSQL's default isolation, invisible uncommitted rows, and rollback visibility. It is not `@Transactional`. |
+| `LessonTest`, `LessonNotFoundTest` | Unit | The domain view of a stored lesson and the unchecked not-found exception. |
+| `LessonControllerTest` | `@WebMvcTest` web slice | Service mocked, no PostgreSQL: 201 with `Location` and the first status, 200 by UUID, every 400 text, 404, 409, 415, a 500 that leaks nothing, the three-field error body, and the echoed or minted correlation id. |
+| `LessonApiTest` | `@SpringBootTest` + MockMvc on PostgreSQL | A second POST of the same business key is 409, the row count stays 1, and `Location` returns the first row. |
+| `OpenApiContractTest` | `@SpringBootTest` + MockMvc | `/v3/api-docs` lists 201, 400, 409 on create and 200, 404 on get, the required fields, and no entity schema. |
+| `DownstreamPropertiesTest` | `ApplicationContextRunner` | `app.downstream` binds a URI and a `Duration`; a missing value stops the start-up. |
+| `ProfileFilesTest` | Unit, reads the yaml text | The shared file holds no URL or password and defaults to `dev`; dev is localhost; prod is only env placeholders; the error leak and actuator exposure settings; no URL literal in `src/main/java`. |
+| `DevProfileTest` | `@SpringBootTest` on `dev` | The bound values after a real boot: `http://localhost:9090`, 2 seconds, the localhost `css` database, and the same properties inside the payment adapter. No socket is opened. |
+| `ActuatorTest` | `@SpringBootTest` + MockMvc | Health is 200 UP without details, info names the product, and `env`, `heapdump`, `beans`, `shutdown` are 404. |
 
 Database tests run `DELETE FROM lesson` in `@BeforeEach` so each method starts with no lesson rows.
 They never DROP the table: doing so would leave Flyway history saying the migration ran while the
@@ -177,7 +318,7 @@ validates.
 
 ## Run it
 
-The default local connection is PostgreSQL 16 at `localhost:5432`, database `css`, user `css`,
+The `dev` profile connects to PostgreSQL 16 at `localhost:5432`, database `css`, user `css`,
 password `css`. Start the database and run the application with:
 
 ```text
@@ -187,13 +328,17 @@ mvn spring-boot:run
 docker compose down
 ```
 
-The first boot of an empty database logs the migration and then the lesson demo:
+The first boot of an empty database logs the profile, the migration, the payment provider address
+and then the lesson demo:
 
 ```text
+No active profile set, falling back to 1 default profile: "dev"
 Current version of schema "public": << Empty Schema >>
 Migrating schema "public" to version "1 - create lesson"
 Migrating schema "public" to version "2 - add tutor"
-Successfully applied 2 migrations to schema "public", now at version v2 (execution time 00:00.012s)
+Successfully applied 2 migrations to schema "public", now at version v2 (execution time 00:00.007s)
+Payment provider configured at http://localhost:9090 with a PT2S timeout; no call is made yet
+Tomcat started on port 8080 (http) with context path '/'
 Lesson LES-2026-0042 arrived from the vendor as REQUESTED
   REQUESTED -> COMPLETED: forbidden (An unpaid lesson cannot be completed)
   payment: hold for LES-2026-0042
@@ -209,6 +354,29 @@ On a second boot, Flyway reports:
 ```text
 Current version of schema "public": 2
 Schema "public" is up to date. No migration necessary.
+```
+
+Try the API and the health check on a running app:
+
+```text
+curl -i -X POST localhost:8080/api/v1/lessons -H 'Content-Type: application/json' \
+     -d '{"businessKey":"LES-2026-0100","subject":"Algebra"}'                         # 201 + Location
+curl -i -X POST localhost:8080/api/v1/lessons -H 'Content-Type: application/json' \
+     -H 'X-Correlation-Id: demo-1' -d '{"businessKey":"LES-2026-0100","subject":"Algebra"}'  # 409, correlationId demo-1
+curl -i localhost:8080/api/v1/lessons/LES-2026-0100                                 # 400 id must be a UUID
+curl -i localhost:8080/actuator/health                                              # 200 {"status":"UP"}
+curl -i localhost:8080/actuator/env                                                 # 404
+```
+
+The contract is at `http://localhost:8080/swagger-ui.html`.
+
+Production uses the `prod` profile and reads everything that varies from the environment:
+
+```text
+SPRING_PROFILES_ACTIVE=prod \
+CSS_DB_URL=jdbc:postgresql://<host>:5432/<db> CSS_DB_USER=<user> CSS_DB_PASSWORD=<password> \
+CSS_DOWNSTREAM_URL=https://<payment-provider> \
+java -jar target/tutoring-marketplace-1.0-SNAPSHOT.jar
 ```
 
 ### Database already has the old table?
