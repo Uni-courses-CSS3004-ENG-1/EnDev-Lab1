@@ -1,7 +1,7 @@
 package com.endev.tutoring.dto;
 
-import com.endev.tutoring.domain.LessonId;
-import com.endev.tutoring.domain.LessonStatus;
+import com.endev.tutoring.model.LessonId;
+import com.endev.tutoring.model.LessonStatus;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;

@@ -1,7 +1,7 @@
 package com.endev.tutoring.dto;
 
-import com.endev.tutoring.domain.LessonId;
-import com.endev.tutoring.domain.LessonStatus;
+import com.endev.tutoring.model.LessonId;
+import com.endev.tutoring.model.LessonStatus;
 
 // JSON from the vendor looks like: {"lessonId": "LES-2026-0042", "status": "BOOKED"}
 public record VendorLessonPayload(String lessonId, String status) {

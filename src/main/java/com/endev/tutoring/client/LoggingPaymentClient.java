@@ -1,7 +1,6 @@
 package com.endev.tutoring.client;
 
-import com.endev.tutoring.domain.LessonId;
-import com.endev.tutoring.domain.PaymentPort;
+import com.endev.tutoring.model.LessonId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;

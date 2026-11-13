@@ -1,9 +1,9 @@
 package com.endev.tutoring.config;
 
-import com.endev.tutoring.domain.LessonPolicy;
-import com.endev.tutoring.domain.Rule;
-import com.endev.tutoring.domain.TransitionRule;
-import com.endev.tutoring.domain.UnpaidCannotComplete;
+import com.endev.tutoring.rule.LessonPolicy;
+import com.endev.tutoring.rule.Rule;
+import com.endev.tutoring.rule.TransitionRule;
+import com.endev.tutoring.rule.UnpaidCannotComplete;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
