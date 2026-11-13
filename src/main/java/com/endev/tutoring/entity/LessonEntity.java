@@ -32,6 +32,13 @@ public class LessonEntity {
     @Column(nullable = false)
     private String tutor;
 
+    // added by V3; optional links to the tutor and student tables
+    @Column(name = "tutor_id")
+    private UUID tutorId;
+
+    @Column(name = "student_id")
+    private UUID studentId;
+
     // filled by DEFAULT now(); if Java sent it, the null would replace the default
     @Column(name = "created_at", insertable = false, updatable = false)
     private OffsetDateTime createdAt;
@@ -74,6 +81,22 @@ public class LessonEntity {
 
     public void setTutor(String tutor) {
         this.tutor = tutor;
+    }
+
+    public UUID getTutorId() {
+        return tutorId;
+    }
+
+    public void setTutorId(UUID tutorId) {
+        this.tutorId = tutorId;
+    }
+
+    public UUID getStudentId() {
+        return studentId;
+    }
+
+    public void setStudentId(UUID studentId) {
+        this.studentId = studentId;
     }
 
     public OffsetDateTime getCreatedAt() {

@@ -30,6 +30,7 @@ import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.matchesPattern;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -58,7 +59,7 @@ class LessonControllerTest {
 
     @BeforeEach
     void stubs() {
-        when(registration.create(eq(new LessonId(KEY)), eq("Algebra")))
+        when(registration.create(eq(new LessonId(KEY)), eq("Algebra"), isNull(), isNull()))
                 .thenReturn(new Lesson(ID, new LessonId(KEY), LessonStatus.REQUESTED, "Algebra"));
     }
 
@@ -82,7 +83,7 @@ class LessonControllerTest {
         @Test
         void acceptsTheMaximumSubjectLength() throws Exception {
             String subject = "a".repeat(120);
-            when(registration.create(new LessonId(KEY), subject))
+            when(registration.create(new LessonId(KEY), subject, null, null))
                     .thenReturn(new Lesson(ID, new LessonId(KEY), LessonStatus.REQUESTED, subject));
 
             mvc.perform(post("/api/v1/lessons")
@@ -103,7 +104,7 @@ class LessonControllerTest {
                     .andExpect(jsonPath("$.businessKey", is(KEY)))
                     .andExpect(jsonPath("$.status", is("REQUESTED")))
                     .andExpect(jsonPath("$.subject", is("Algebra")));
-            verify(registration, never()).create(any(), any());
+            verify(registration, never()).create(any(), any(), any(), any());
         }
     }
 
@@ -117,7 +118,7 @@ class LessonControllerTest {
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code", is("VALIDATION")))
                     .andExpect(jsonPath("$.message", is("subject must not be blank")));
-            verify(registration, never()).create(any(), any());
+            verify(registration, never()).create(any(), any(), any(), any());
         }
 
         @Test
@@ -126,7 +127,7 @@ class LessonControllerTest {
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code", is("VALIDATION")))
                     .andExpect(jsonPath("$.message", is("subject must not be blank")));
-            verify(registration, never()).create(any(), any());
+            verify(registration, never()).create(any(), any(), any(), any());
         }
 
         @Test
@@ -135,7 +136,7 @@ class LessonControllerTest {
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code", is("VALIDATION")))
                     .andExpect(jsonPath("$.message", is("businessKey must not be blank")));
-            verify(registration, never()).create(any(), any());
+            verify(registration, never()).create(any(), any(), any(), any());
         }
 
         @Test
@@ -144,7 +145,7 @@ class LessonControllerTest {
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code", is("VALIDATION")))
                     .andExpect(jsonPath("$.message", containsString("size must be between 0 and 120")));
-            verify(registration, never()).create(any(), any());
+            verify(registration, never()).create(any(), any(), any(), any());
         }
 
         @Test
@@ -161,7 +162,7 @@ class LessonControllerTest {
 
         @Test
         void duplicateIsConflict() throws Exception {
-            when(registration.create(new LessonId(KEY), "Algebra"))
+            when(registration.create(new LessonId(KEY), "Algebra", null, null))
                     .thenThrow(new DuplicateLessonException(KEY));
 
             postJson("{\"businessKey\":\"" + KEY + "\",\"subject\":\"Algebra\"}")
@@ -198,7 +199,7 @@ class LessonControllerTest {
 
         @Test
         void unexpectedDetailIsNotLeaked() throws Exception {
-            when(registration.create(new LessonId(KEY), "Algebra"))
+            when(registration.create(new LessonId(KEY), "Algebra", null, null))
                     .thenThrow(new RuntimeException("secret detail"));
 
             postJson("{\"businessKey\":\"" + KEY + "\",\"subject\":\"Algebra\"}")

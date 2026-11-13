@@ -28,15 +28,17 @@ A request flows controller -> service -> repository -> database. Each folder has
 com.endev.tutoring/
   TutoringApplication            starts the app (root package, so Spring scans everything below)
 
-  controller/   LessonController (@RestController, /api/v1/lessons)
-  service/      LessonRegistrationService (@Transactional writes and reads), LessonService (rules + payment)
-  repository/   LessonRepository (@Repository, EntityManager)
-  entity/       LessonEntity (@Entity, the lesson table)
-  mapper/       LessonMapper (entity <-> model, status <-> CHECK word)
-  model/        Lesson, LessonId, LessonStatus
+  controller/   LessonController, TutorController, StudentController (@RestController, /api/v1/...)
+  service/      LessonRegistrationService (@Transactional writes and reads), LessonService (rules + payment),
+                TutorService, StudentService
+  repository/   LessonRepository, TutorRepository, StudentRepository (@Repository, EntityManager)
+  entity/       LessonEntity, TutorEntity, StudentEntity (@Entity, one per table)
+  mapper/       LessonMapper, TutorMapper, StudentMapper (entity <-> model)
+  model/        Lesson, LessonId, LessonStatus, Tutor, Student
   rule/         Rule, TransitionRule, UnpaidCannotComplete, LessonPolicy
-  dto/          CreateLessonRequest, LessonResponse, ApiError (JSON), VendorLessonPayload
-  exception/    DuplicateLessonException, LessonNotFoundException, GlobalExceptionHandler (@RestControllerAdvice)
+  dto/          Create...Request and ...Response for lesson, tutor and student, ApiError, VendorLessonPayload
+  exception/    DuplicateLessonException, DuplicateEmailException, LessonNotFoundException,
+                TutorNotFoundException, StudentNotFoundException, GlobalExceptionHandler (@RestControllerAdvice)
   client/       PaymentPort, LoggingPaymentClient, DownstreamProperties (@ConfigurationProperties)
   config/       RuleConfig, ClientConfig
   demo/         LessonDemoRunner (prints the lesson process on start-up)
@@ -72,6 +74,26 @@ ALTER TABLE lesson
   ADD COLUMN tutor text NOT NULL DEFAULT 'UNASSIGNED';
 ```
 
+`V3__create_tutor_and_student.sql` adds two tables and links a lesson to them:
+
+```sql
+CREATE TABLE tutor (
+  id uuid PRIMARY KEY, name text NOT NULL, email text NOT NULL UNIQUE, subject text NOT NULL,
+  hourly_rate numeric(10, 2) NOT NULL CHECK (hourly_rate > 0), created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE student (
+  id uuid PRIMARY KEY, name text NOT NULL, email text NOT NULL UNIQUE,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE lesson
+  ADD COLUMN tutor_id   uuid REFERENCES tutor (id),
+  ADD COLUMN student_id uuid REFERENCES student (id);
+```
+
+Both links are optional, so lessons created before V3, or without a tutor yet, stay valid. When a
+lesson is created with a `tutorId`, the V2 `tutor` text column gets that tutor's name instead of
+`UNASSIGNED`.
+
 On startup, Flyway applies pending migrations first. Hibernate then runs with
 `spring.jpa.hibernate.ddl-auto: validate` and compares `LessonEntity` with the table. A mismatch
 stops startup. Hibernate never creates or alters a table; `update` and `create` are not used because
@@ -82,16 +104,17 @@ checksum, installation order, and success. An applied file is frozen because cha
 changes its checksum. The next change is always a new `V<n>` file. V1 was not edited to add
 `tutor`; that change is V2.
 
-After both migrations have run, the history query is:
+After all three migrations have run, the history query is:
 
 ```text
 SELECT installed_rank, version, description, success FROM flyway_schema_history ORDER BY installed_rank;
 
- installed_rank | version |  description  | success
-----------------+---------+---------------+---------
-              1 | 1       | create lesson | t
-              2 | 2       | add tutor     | t
-(2 rows)
+ installed_rank | version |       description        | success
+----------------+---------+--------------------------+---------
+              1 | 1       | create lesson            | t
+              2 | 2       | add tutor                | t
+              3 | 3       | create tutor and student | t
+(3 rows)
 ```
 
 There is no standalone schema source outside the migrations. One owner of the schema prevents a
@@ -143,6 +166,20 @@ The lesson rules stay plain Java; HTTP is an adapter. Another team gets a URL, a
 |---|---|
 | `POST /api/v1/lessons` | Create one lesson |
 | `GET /api/v1/lessons/{id}` | Read that lesson by its UUID |
+| `POST /api/v1/tutors` | Create a tutor: name, email (unique), subject, hourly rate |
+| `GET /api/v1/tutors/{id}` | Read that tutor by its UUID |
+| `POST /api/v1/students` | Create a student: name, email (unique) |
+| `GET /api/v1/students/{id}` | Read that student by its UUID |
+
+A lesson may name an existing tutor and student with the optional `tutorId` and `studentId`
+fields. Old clients that send only `businessKey` and `subject` keep working on v1. An unknown
+`tutorId` or `studentId` is **404** and writes nothing; a second tutor or student with the same
+email is **409** `DUPLICATE`.
+
+```json
+{ "businessKey": "LES-2026-0500", "subject": "Algebra",
+  "tutorId": "<tutor uuid>", "studentId": "<student uuid>" }
+```
 
 The version sits in the path. The path id is the row's UUID from Lab 3; the business key stays in
 the body. There is no `PUT`, `PATCH`, `DELETE` or list endpoint in this lab, and a `GET` never
@@ -274,7 +311,7 @@ datasource URL.
 | `LessonServicePaymentTest` | Mockito | A mocked `PaymentPort` receives the payment calls. |
 | `LessonServiceTest` | `@SpringBootTest` integration | Lesson service wiring and rule behavior. |
 | `LessonRegistrationServiceTest` | `@SpringBootTest` integration | Registration, tutor persistence, duplicate translation, and the committed counts 0 and 1. It is not `@Transactional`. |
-| `FlywayMigrationTest` | Migration integration | V1 and V2 are the two successful migrations and the old standalone resource is absent. |
+| `FlywayMigrationTest` | Migration integration | V1, V2 and V3 are the three successful migrations and the old standalone resource is absent. |
 | `LessonRepositoryTest` | PostgreSQL `@DataJpaTest` slice | EntityManager `persist`, JPQL count/status access, status CHECK values, parameter binding, and flush-time integrity errors. |
 | `LessonMapperTest` | Unit | Every status maps to and from its database word; unknown and null values fail. |
 | `SchemaTest` | `@SpringBootTest` integration | Database constraints and the V2 tutor default. |
@@ -287,6 +324,7 @@ datasource URL.
 | `ProfileFilesTest` | Unit, reads the yaml text | The shared file holds no URL or password and defaults to `dev`; dev is localhost; prod is only env placeholders; the error leak and actuator exposure settings; no URL literal in `src/main/java`. |
 | `DevProfileTest` | `@SpringBootTest` on `dev` | The bound values after a real boot: `http://localhost:9090`, 2 seconds, the localhost `css` database, and the same properties inside the payment adapter. No socket is opened. |
 | `ActuatorTest` | `@SpringBootTest` + MockMvc | Health is 200 UP without details, info names the product, and `env`, `heapdump`, `beans`, `shutdown` are 404. |
+| `TutorStudentApiTest` | `@SpringBootTest` + MockMvc on PostgreSQL | Tutors and students: create with `Location`, read by UUID, 409 on a taken email (one row stays), 400 on a bad email or rate, 404 on an unknown UUID. Lessons keep `tutorId`/`studentId` and the tutor's name; an unknown tutor or student is 404 and writes no lesson. |
 
 Database tests run `DELETE FROM lesson` in `@BeforeEach` so each method starts with no lesson rows.
 They never DROP the table: doing so would leave Flyway history saying the migration ran while the

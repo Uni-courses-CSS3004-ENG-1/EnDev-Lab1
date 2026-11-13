@@ -55,13 +55,14 @@ public class GlobalExceptionHandler {
                 "content type must be application/json", request);
     }
 
-    @ExceptionHandler(LessonNotFoundException.class)
-    ResponseEntity<ApiError> lessonNotFound(LessonNotFoundException exception, HttpServletRequest request) {
+    @ExceptionHandler({LessonNotFoundException.class, TutorNotFoundException.class,
+            StudentNotFoundException.class})
+    ResponseEntity<ApiError> notFound(RuntimeException exception, HttpServletRequest request) {
         return error(HttpStatus.NOT_FOUND, "NOT_FOUND", exception.getMessage(), request);
     }
 
-    @ExceptionHandler(DuplicateLessonException.class)
-    ResponseEntity<ApiError> duplicateLesson(DuplicateLessonException exception, HttpServletRequest request) {
+    @ExceptionHandler({DuplicateLessonException.class, DuplicateEmailException.class})
+    ResponseEntity<ApiError> duplicate(RuntimeException exception, HttpServletRequest request) {
         return error(HttpStatus.CONFLICT, "DUPLICATE", exception.getMessage(), request);
     }
 

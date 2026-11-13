@@ -27,7 +27,7 @@ public final class LessonMapper {
     // the entity never leaves the repository layer; callers get the model view
     public static Lesson toLesson(LessonEntity lesson) {
         return new Lesson(lesson.getId(), new LessonId(lesson.getBusinessKey()), toStatus(lesson.getStatus()),
-                lesson.getSubject());
+                lesson.getSubject(), lesson.getTutorId(), lesson.getStudentId());
     }
 
     public static String toText(LessonStatus status) {

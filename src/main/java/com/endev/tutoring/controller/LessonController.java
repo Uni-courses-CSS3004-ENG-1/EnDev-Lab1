@@ -51,12 +51,16 @@ public class LessonController {
             @ApiResponse(responseCode = "400", description = "Invalid lesson request",
                     content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
                             schema = @Schema(implementation = ApiError.class))),
+            @ApiResponse(responseCode = "404", description = "tutorId or studentId does not exist",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ApiError.class))),
             @ApiResponse(responseCode = "409", description = "Business key already exists",
                     content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
                             schema = @Schema(implementation = ApiError.class)))
     })
     public ResponseEntity<LessonResponse> create(@Valid @RequestBody CreateLessonRequest request) {
-        Lesson lesson = registration.create(new LessonId(request.businessKey()), request.subject());
+        Lesson lesson = registration.create(new LessonId(request.businessKey()), request.subject(),
+                request.tutorId(), request.studentId());
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
                 .path("/{id}")
                 .buildAndExpand(lesson.id())

@@ -6,12 +6,13 @@ import com.endev.tutoring.mapper.LessonMapper;
 import java.util.UUID;
 
 // What a client sees of a lesson. Built from the model Lesson, never from the JPA entity,
-// so tutor and created_at stay off the wire and the table shape stays private.
-public record LessonResponse(UUID id, String businessKey, String status, String subject) {
+// so created_at stays off the wire and the table shape stays private.
+public record LessonResponse(UUID id, String businessKey, String status, String subject,
+                             UUID tutorId, UUID studentId) {
 
     public static LessonResponse from(Lesson lesson) {
         // the status is the same token the CHECK constraint stores
         return new LessonResponse(lesson.id(), lesson.businessKey().value(),
-                LessonMapper.toText(lesson.status()), lesson.subject());
+                LessonMapper.toText(lesson.status()), lesson.subject(), lesson.tutorId(), lesson.studentId());
     }
 }
