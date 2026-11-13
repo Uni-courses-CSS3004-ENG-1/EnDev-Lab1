@@ -1,0 +1,29 @@
+package com.endev.tutoring.rule;
+
+import com.endev.tutoring.model.LessonStatus;
+
+import java.util.List;
+
+public class LessonPolicy implements Rule {
+
+    private final List<Rule> rules;
+
+    public LessonPolicy(List<Rule> rules) {
+        this.rules = List.copyOf(rules);
+    }
+
+    @Override
+    public void check(LessonStatus from, LessonStatus to) {
+        if (from == null || to == null) {
+            throw new IllegalArgumentException("Status must not be null");
+        }
+        for (Rule rule : rules) {
+            rule.check(from, to);
+        }
+    }
+
+    public LessonStatus move(LessonStatus from, LessonStatus to) {
+        check(from, to);
+        return to;
+    }
+}

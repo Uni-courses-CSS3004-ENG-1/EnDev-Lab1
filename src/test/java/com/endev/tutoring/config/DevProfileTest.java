@@ -1,5 +1,7 @@
 package com.endev.tutoring.config;
 
+import com.endev.tutoring.TutoringApplication;
+
 import com.endev.tutoring.client.DownstreamProperties;
 import com.endev.tutoring.client.LoggingPaymentClient;
 import org.junit.jupiter.api.DisplayName;
@@ -21,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 // Boots the whole application on the dev profile and reads the values Spring actually bound,
 // not the yaml text. Nothing here opens a socket to port 9090: the payment client only holds
 // the address until Lab 6 makes the call.
-@SpringBootTest(classes = Application.class)
+@SpringBootTest(classes = TutoringApplication.class)
 @ActiveProfiles("dev")
 class DevProfileTest {
 

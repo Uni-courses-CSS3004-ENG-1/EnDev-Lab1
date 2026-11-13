@@ -20,54 +20,32 @@ The database id is a surrogate UUID; the business key is the human-facing identi
 The database CHECK constraint and `LessonStatus` use these four uppercase words. Keeping the rule
 in the database matters because another client must not be able to write an unknown status.
 
-## Package diagram
+## Package structure
 
-The arrows point inward: outer adapters depend on the application handlers, and handlers depend on
-the domain and persistence ports they use.
+A request flows controller -> service -> repository -> database. Each folder has one job:
 
 ```text
-client   -> handler -> domain
-dto      -> handler
-config   -> handler, domain, client
-persistence -> handler
+com.endev.tutoring/
+  TutoringApplication            starts the app (root package, so Spring scans everything below)
 
-client/
-  LoggingPaymentClient
-  DownstreamProperties (@ConfigurationProperties "app.downstream")
-
-dto/
-  VendorLessonPayload
-
-handler/
-  LessonController (@RestController, /api/v1/lessons)
-  CreateLessonRequest, LessonResponse, ApiError (JSON records)
-  ApiErrors (@RestControllerAdvice)
-  LessonDemoRunner
-  LessonRegistration
-  LessonService
-
-persistence/
-  LessonEntity (@Entity)
-  LessonJpa (@Repository, EntityManager)
-  LessonMapper (plain final class)
-
-domain/
-  DuplicateLesson, Lesson, LessonId, LessonNotFound, LessonPolicy, LessonStatus
-  PaymentPort, Rule, TransitionRule, UnpaidCannotComplete
-
-config/
-  Application, ClientConfig, RuleConfig
+  controller/   LessonController (@RestController, /api/v1/lessons)
+  service/      LessonRegistrationService (@Transactional writes and reads), LessonService (rules + payment)
+  repository/   LessonRepository (@Repository, EntityManager)
+  entity/       LessonEntity (@Entity, the lesson table)
+  mapper/       LessonMapper (entity <-> model, status <-> CHECK word)
+  model/        Lesson, LessonId, LessonStatus
+  rule/         Rule, TransitionRule, UnpaidCannotComplete, LessonPolicy
+  dto/          CreateLessonRequest, LessonResponse, ApiError (JSON), VendorLessonPayload
+  exception/    DuplicateLessonException, LessonNotFoundException, GlobalExceptionHandler (@RestControllerAdvice)
+  client/       PaymentPort, LoggingPaymentClient, DownstreamProperties (@ConfigurationProperties)
+  config/       RuleConfig, ClientConfig
+  demo/         LessonDemoRunner (prints the lesson process on start-up)
 ```
 
-`domain` imports no Spring, no `java.sql`, no `jakarta.persistence` and no `jakarta.validation`.
-`LessonEntity` is kept in `persistence`, so persistence annotations do not leak into the rules and
-value objects, and Jackson never sees it.
-
-`Application` starts the application, `RuleConfig` supplies the rule wiring and `ClientConfig`
-registers the outbound settings. `LessonController` is the HTTP adapter: it chooses the status
-code and delegates to `LessonRegistration`, which handles database writes and reads.
-`LessonService` applies lesson rules and uses the `PaymentPort`; `LoggingPaymentClient` is the
-current adapter for that port.
+`model` and `rule` import no Spring, no `java.sql`, no `jakarta.persistence` and no
+`jakarta.validation`, and the two lesson exceptions are plain unchecked exceptions. Only
+`GlobalExceptionHandler` turns them into HTTP statuses. `LessonEntity` never leaves the
+repository and service layer, so Jackson never sees it.
 
 ## Storage
 
@@ -127,7 +105,7 @@ constraint because it is the lesson identity used by vendor requests. `status` h
 `created_at` is left to PostgreSQL's `DEFAULT now()` with `insertable = false`; `status` is stored
 as the CHECK words, and `tutor` is the non-null column added by V2.
 
-`LessonJpa` receives an `EntityManager`. It uses `persist`, not Spring Data `save()`: the UUID is
+`LessonRepository` receives an `EntityManager`. It uses `persist`, not Spring Data `save()`: the UUID is
 already set, and `save()` would check whether that id exists first. Its count and status queries
 are JPQL over entity fields such as `l.businessKey`, and `flush()` sends pending SQL to PostgreSQL.
 `LessonMapper` is a plain class with static methods. Status mapping lives outside the repository
@@ -136,16 +114,16 @@ database value in `InvalidDataAccessApiUsageException`.
 
 ## Transactions and isolation
 
-`@Transactional` sits on `LessonRegistration`, the service boundary. One public registration
+`@Transactional` sits on `LessonRegistrationService`, the service boundary. One public registration
 method is one transaction. `status` is a read-only transaction, `open-in-view` is false, and the
 service never returns `LessonEntity`.
 
 `persist` only makes Hibernate remember the row. `flush()` is inside the `try`, so the INSERT is
 sent while the `DataIntegrityViolationException` catch is active. A PostgreSQL SQLState `23505`
-becomes `DuplicateLesson`; CHECK and NOT NULL violations are rethrown. Without the flush, the
+becomes `DuplicateLessonException`; CHECK and NOT NULL violations are rethrown. Without the flush, the
 constraint error would appear at commit, outside the catch.
 
-`DuplicateLesson` is unchecked, so Spring rolls the transaction back. A catch that returned
+`DuplicateLessonException` is unchecked, so Spring rolls the transaction back. A catch that returned
 normally could commit a half-write: the kind of bug that fails at 02:00 when nobody is watching.
 `insertTwice` is one transaction, so its first insert is rolled back too and the count is 0. Two
 `register` calls are two transactions, so the first committed request stays and the count is 1.
@@ -159,7 +137,7 @@ either stricter level.
 
 ## REST API
 
-The domain stays Java; HTTP is an adapter. Another team gets a URL, a JSON body and a status code.
+The lesson rules stay plain Java; HTTP is an adapter. Another team gets a URL, a JSON body and a status code.
 
 | Call | Meaning |
 |---|---|
@@ -185,9 +163,9 @@ Location: http://localhost:8080/api/v1/lessons/ae61b8be-ee78-4768-8b15-cfea4c906
 {"id":"ae61b8be-ee78-4768-8b15-cfea4c906bd3","businessKey":"LES-2026-0042","status":"REQUESTED","subject":"Algebra"}
 ```
 
-`CreateLessonRequest` carries `@NotBlank` and `@Size(max = 120)` in the `handler` package, and
-`@Valid` runs before the service: a bad body never reaches `LessonRegistration`. `LessonResponse`
-is built from the domain `Lesson`, never from `LessonEntity`, so `tutor` and `created_at` stay off
+`CreateLessonRequest` carries `@NotBlank` and `@Size(max = 120)` in the `dto` package, and
+`@Valid` runs before the service: a bad body never reaches `LessonRegistrationService`. `LessonResponse`
+is built from the model `Lesson`, never from `LessonEntity`, so `tutor` and `created_at` stay off
 the wire. A new lesson starts as `REQUESTED` with the tutor `UNASSIGNED`; `status` is the same
 token the CHECK constraint stores.
 
@@ -211,7 +189,7 @@ The status is the outcome. A 200 whose body hides an error would be a bug.
 
 When several fields fail, the message names the first one by field name, so the answer is stable.
 
-409 is the Lab 3 `DuplicateLesson`, now visible to the caller. The first committed row stays:
+409 is the Lab 3 `DuplicateLessonException`, now visible to the caller. The first committed row stays:
 
 | After this call | Rows for that business key |
 |---|---|
@@ -229,8 +207,8 @@ Every failure body has exactly three fields:
 { "code": "DUPLICATE", "message": "duplicate lesson: LES-2026-0042", "correlationId": "demo-1" }
 ```
 
-`ApiErrors` is the only class that knows 400, 404, 409, 415 and 500. `LessonNotFound` and
-`DuplicateLesson` stay in `domain`, unchecked and without a Spring import. The advice reads
+`GlobalExceptionHandler` is the only class that knows 400, 404, 409, 415 and 500. `LessonNotFoundException` and
+`DuplicateLessonException` are plain unchecked exceptions without a Spring import. The advice reads
 `X-Correlation-Id`: if the caller sent one, the body repeats it; if it is missing or blank, a new
 UUID is minted. A 500 logs the exception with the correlation id, but the exception text and class
 name never go into the body.
@@ -286,8 +264,8 @@ datasource URL.
 
 | Test class | Kind | What it proves |
 |---|---|---|
-| `ApplicationTest` | `@SpringBootTest` integration | The application context and JPA entity model start. |
-| `DuplicateLessonTest` | Unit | Duplicate lesson error text and unchecked exception behavior. |
+| `TutoringApplicationTest` | `@SpringBootTest` integration | The application context and JPA entity model start. |
+| `DuplicateLessonExceptionTest` | Unit | Duplicate lesson error text and unchecked exception behavior. |
 | `LessonIdTest` | Unit | Lesson id value behavior. Its malformed-format test is disabled because format validation is not implemented yet. |
 | `LessonPolicyTest` | Unit | Status transition policy using `@CsvSource` and `assertAll`. |
 | `TransitionRuleTest` | Unit | Transition rules, grouped with `@Nested`, `@CsvSource`, and `assertAll`. |
@@ -295,13 +273,13 @@ datasource URL.
 | `VendorLessonPayloadTest` | Unit | Vendor payload value behavior. |
 | `LessonServicePaymentTest` | Mockito | A mocked `PaymentPort` receives the payment calls. |
 | `LessonServiceTest` | `@SpringBootTest` integration | Lesson service wiring and rule behavior. |
-| `LessonRegistrationTest` | `@SpringBootTest` integration | Registration, tutor persistence, duplicate translation, and the committed counts 0 and 1. It is not `@Transactional`. |
+| `LessonRegistrationServiceTest` | `@SpringBootTest` integration | Registration, tutor persistence, duplicate translation, and the committed counts 0 and 1. It is not `@Transactional`. |
 | `FlywayMigrationTest` | Migration integration | V1 and V2 are the two successful migrations and the old standalone resource is absent. |
-| `LessonJpaTest` | PostgreSQL `@DataJpaTest` slice | EntityManager `persist`, JPQL count/status access, status CHECK values, parameter binding, and flush-time integrity errors. |
+| `LessonRepositoryTest` | PostgreSQL `@DataJpaTest` slice | EntityManager `persist`, JPQL count/status access, status CHECK values, parameter binding, and flush-time integrity errors. |
 | `LessonMapperTest` | Unit | Every status maps to and from its database word; unknown and null values fail. |
 | `SchemaTest` | `@SpringBootTest` integration | Database constraints and the V2 tutor default. |
 | `TransactionIsolationTest` | `@SpringBootTest` integration | PostgreSQL's default isolation, invisible uncommitted rows, and rollback visibility. It is not `@Transactional`. |
-| `LessonTest`, `LessonNotFoundTest` | Unit | The domain view of a stored lesson and the unchecked not-found exception. |
+| `LessonTest`, `LessonNotFoundExceptionTest` | Unit | The model view of a stored lesson and the unchecked not-found exception. |
 | `LessonControllerTest` | `@WebMvcTest` web slice | Service mocked, no PostgreSQL: 201 with `Location` and the first status, 200 by UUID, every 400 text, 404, 409, 415, a 500 that leaks nothing, the three-field error body, and the echoed or minted correlation id. |
 | `LessonApiTest` | `@SpringBootTest` + MockMvc on PostgreSQL | A second POST of the same business key is 409, the row count stays 1, and `Location` returns the first row. |
 | `OpenApiContractTest` | `@SpringBootTest` + MockMvc | `/v3/api-docs` lists 201, 400, 409 on create and 200, 404 on get, the required fields, and no entity schema. |
