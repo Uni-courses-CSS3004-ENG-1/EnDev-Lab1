@@ -50,6 +50,25 @@ class OpenApiContractTest {
         }
 
         @Test
+        void documentsTheSecurityStatuses() throws Exception {
+            mvc.perform(get("/v3/api-docs"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.paths['/api/v1/auth/login'].post.responses['200']").exists())
+                    .andExpect(jsonPath("$.paths['/api/v1/auth/login'].post.responses['400']").exists())
+                    .andExpect(jsonPath("$.paths['/api/v1/auth/login'].post.responses['401']").exists())
+                    .andExpect(jsonPath("$.paths['/api/v1/lessons/{id}/confirm'].post.responses['200']").exists())
+                    .andExpect(jsonPath("$.paths['/api/v1/lessons/{id}/confirm'].post.responses['401']").exists())
+                    .andExpect(jsonPath("$.paths['/api/v1/lessons/{id}/confirm'].post.responses['403']").exists())
+                    .andExpect(jsonPath("$.paths['/api/v1/lessons/{id}/confirm'].post.responses['409']").exists())
+                    .andExpect(jsonPath("$.paths['/api/me'].get.responses['200']").exists())
+                    .andExpect(jsonPath("$.paths['/api/me'].get.responses['401']").exists())
+                    .andExpect(jsonPath("$.components.schemas.TokenResponse.properties.accessToken").exists())
+                    .andExpect(jsonPath("$.components.schemas.LoginRequest.required",
+                            hasItems("username", "password")))
+                    .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.scheme", is("bearer")));
+        }
+
+        @Test
         void exposesSwaggerUiEntryPoint() throws Exception {
             MvcResult result = mvc.perform(get("/swagger-ui.html")).andReturn();
 
