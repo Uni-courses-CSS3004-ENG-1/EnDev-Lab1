@@ -15,6 +15,7 @@ import org.springframework.test.web.servlet.MvcResult;
 
 import java.util.UUID;
 
+import static com.endev.tutoring.security.TestTokens.student;
 import static org.hamcrest.Matchers.is;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -47,7 +48,7 @@ class LessonApiTest {
         void duplicatePostKeepsOneRowAndLocationReturnsIt() throws Exception {
             String body = body("LES-API-001", "Algebra");
 
-            MvcResult first = mvc.perform(post("/api/v1/lessons")
+            MvcResult first = mvc.perform(post("/api/v1/lessons").with(student())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(body))
                     .andExpect(status().isCreated())
@@ -56,7 +57,7 @@ class LessonApiTest {
             String location = first.getResponse().getHeader("Location");
             String firstBody = first.getResponse().getContentAsString();
 
-            mvc.perform(post("/api/v1/lessons")
+            mvc.perform(post("/api/v1/lessons").with(student())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(body))
                     .andExpect(status().isConflict())
@@ -64,18 +65,18 @@ class LessonApiTest {
 
             assertEquals(1, count("LES-API-001"));
 
-            mvc.perform(get(location))
+            mvc.perform(get(location).with(student()))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.businessKey", is("LES-API-001")))
                     .andExpect(jsonPath("$.subject", is("Algebra")))
                     .andExpect(content().string(firstBody));
 
             UUID missing = UUID.randomUUID();
-            mvc.perform(get("/api/v1/lessons/{id}", missing))
+            mvc.perform(get("/api/v1/lessons/{id}", missing).with(student()))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.code", is("NOT_FOUND")));
 
-            mvc.perform(post("/api/v1/lessons")
+            mvc.perform(post("/api/v1/lessons").with(student())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(body("LES-API-002", "Geometry")))
                     .andExpect(status().isCreated());

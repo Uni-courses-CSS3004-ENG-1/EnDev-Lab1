@@ -40,6 +40,11 @@ management:
     env:
       enabled: true
 
+app:
+  jwt:
+    # the iss claim: a token issued by another product is a 401 here. Not a secret.
+    issuer: tutoring
+
 info:
   app:
     name: Tutoring marketplace

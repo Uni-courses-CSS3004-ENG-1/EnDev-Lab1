@@ -8,19 +8,23 @@ import com.endev.tutoring.model.Lesson;
 import com.endev.tutoring.model.LessonId;
 import com.endev.tutoring.exception.LessonNotFoundException;
 import com.endev.tutoring.model.LessonStatus;
+import com.endev.tutoring.security.SecurityConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.UUID;
 
+import static com.endev.tutoring.security.TestTokens.student;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.hasSize;
@@ -43,9 +47,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-// Web slice: only MVC; the service is mocked, so no PostgreSQL is involved.
+// Web slice: only MVC and the real filter chain; the service is mocked, so no PostgreSQL is
+// involved. Every call carries a student's token, so the Lab 4 statuses are checked behind security.
 @WebMvcTest(LessonController.class)
 @ContextConfiguration(classes = TutoringApplication.class)
+@Import(SecurityConfig.class)
 class LessonControllerTest {
 
     private static final UUID ID = UUID.fromString("7d3f0a52-1c2b-4c55-9a51-2f9d0c1e4b6a");
@@ -56,6 +62,10 @@ class LessonControllerTest {
 
     @MockitoBean
     private LessonRegistrationService registration;
+
+    // the slice has no JwtConfig; jwt() skips decoding, but the chain still wants the bean
+    @MockitoBean
+    private JwtDecoder jwtDecoder;
 
     @BeforeEach
     void stubs() {
@@ -69,7 +79,7 @@ class LessonControllerTest {
 
         @Test
         void createsWithLocation() throws Exception {
-            mvc.perform(post("/api/v1/lessons")
+            mvc.perform(post("/api/v1/lessons").with(student())
                             .contentType(APPLICATION_JSON)
                             .content("{\"businessKey\":\"" + KEY + "\",\"subject\":\"Algebra\"}"))
                     .andExpect(status().isCreated())
@@ -86,7 +96,7 @@ class LessonControllerTest {
             when(registration.create(new LessonId(KEY), subject, null, null))
                     .thenReturn(new Lesson(ID, new LessonId(KEY), LessonStatus.REQUESTED, subject));
 
-            mvc.perform(post("/api/v1/lessons")
+            mvc.perform(post("/api/v1/lessons").with(student())
                             .contentType(APPLICATION_JSON)
                             .content("{\"businessKey\":\"" + KEY + "\",\"subject\":\"" + subject + "\"}"))
                     .andExpect(status().isCreated())
@@ -98,7 +108,7 @@ class LessonControllerTest {
             when(registration.find(ID))
                     .thenReturn(new Lesson(ID, new LessonId(KEY), LessonStatus.REQUESTED, "Algebra"));
 
-            mvc.perform(get("/api/v1/lessons/{id}", ID))
+            mvc.perform(get("/api/v1/lessons/{id}", ID).with(student()))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.id", is(ID.toString())))
                     .andExpect(jsonPath("$.businessKey", is(KEY)))
@@ -152,7 +162,7 @@ class LessonControllerTest {
         void lessonNotFoundIsNotFound() throws Exception {
             when(registration.find(ID)).thenThrow(new LessonNotFoundException(ID));
 
-            mvc.perform(get("/api/v1/lessons/{id}", ID))
+            mvc.perform(get("/api/v1/lessons/{id}", ID).with(student()))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.code", is("NOT_FOUND")))
                     .andExpect(jsonPath("$.message", is("lesson not found: " + ID)))
@@ -175,7 +185,7 @@ class LessonControllerTest {
 
         @Test
         void nonUuidPathIsValidationError() throws Exception {
-            mvc.perform(get("/api/v1/lessons/LES-2026-0042"))
+            mvc.perform(get("/api/v1/lessons/LES-2026-0042").with(student()))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code", is("VALIDATION")))
                     .andExpect(jsonPath("$.message", is("id must be a UUID")));
@@ -184,14 +194,14 @@ class LessonControllerTest {
 
         @Test
         void nonJsonBodyIsValidationError() throws Exception {
-            mvc.perform(post("/api/v1/lessons").contentType(APPLICATION_JSON).content("not json"))
+            mvc.perform(post("/api/v1/lessons").with(student()).contentType(APPLICATION_JSON).content("not json"))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.message", is("body must be JSON")));
         }
 
         @Test
         void textBodyIsUnsupported() throws Exception {
-            mvc.perform(post("/api/v1/lessons").contentType(TEXT_PLAIN).content("Algebra"))
+            mvc.perform(post("/api/v1/lessons").with(student()).contentType(TEXT_PLAIN).content("Algebra"))
                     .andExpect(status().isUnsupportedMediaType())
                     .andExpect(jsonPath("$.code", is("UNSUPPORTED")))
                     .andExpect(jsonPath("$.message", is("content type must be application/json")));
@@ -214,7 +224,7 @@ class LessonControllerTest {
         void correlationIdIsReturnedAndBodyHasThreeFields() throws Exception {
             String correlationId = "request-42";
 
-            mvc.perform(post("/api/v1/lessons")
+            mvc.perform(post("/api/v1/lessons").with(student())
                             .contentType(APPLICATION_JSON)
                             .header("X-Correlation-Id", correlationId)
                             .content("{\"businessKey\":\"\",\"subject\":\"Algebra\"}"))
@@ -233,7 +243,7 @@ class LessonControllerTest {
         }
 
         private org.springframework.test.web.servlet.ResultActions postJson(String body) throws Exception {
-            return mvc.perform(post("/api/v1/lessons").contentType(APPLICATION_JSON).content(body));
+            return mvc.perform(post("/api/v1/lessons").with(student()).contentType(APPLICATION_JSON).content(body));
         }
     }
 }
