@@ -266,6 +266,38 @@ schema is `LessonResponse`, not the entity.
 | Clearer message text | 201 becoming 200 without `Location` |
 | | A status token becoming a number |
 
+## Security
+
+Two questions stand in front of every controller. **Who are you?** fails as **401**. **May you do
+this?** fails as **403**. A caller logs in once at `POST /api/v1/auth/login`, receives a signed JWT,
+and sends it as `Authorization: Bearer <token>` on every other call.
+
+### Roles
+
+| Role | Who | May |
+|---|---|---|
+| `STUDENT` (junior) | A student who books lessons | Create and read lessons, tutors and students |
+| `TUTOR` (senior) | A tutor who teaches them | Everything a student may, and confirm a requested lesson |
+
+The locked action is `POST /api/v1/lessons/{id}/confirm`: it moves a lesson from `REQUESTED` to
+`CONFIRMED` and places the payment hold, so only a tutor may do it. It is a status change, not a
+delete; the row stays.
+
+### Rules
+
+The filter chain follows this table from top to bottom. The first matching row wins.
+
+| Action | `STUDENT` | `TUTOR` | No token |
+|---|---|---|---|
+| `POST /api/v1/auth/login` | anyone | anyone | allowed |
+| The auth page: `GET /`, `/index.html`, `/app.css`, `/app.js` | anyone | anyone | allowed |
+| `GET /actuator/health`, `GET /actuator/info` | anyone | anyone | allowed |
+| springdoc: `/swagger-ui.html`, `/swagger-ui/**`, `/v3/api-docs/**` | anyone | anyone | allowed |
+| Confirm a lesson: `POST /api/v1/lessons/{id}/confirm` | **403** | yes | 401 |
+| `GET /api/me` | yes | yes | 401 |
+| Create and read lessons, tutors and students: `/api/v1/**` | yes | yes | 401 |
+| Anything else, including `/actuator/env` and `/actuator/heapdump` | 403 | 403 | 401 |
+
 ## Configuration and profiles
 
 Nothing that varies between a laptop and a server is a Java string. `src/main/java` contains no
