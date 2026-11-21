@@ -4,6 +4,7 @@ import com.endev.tutoring.dto.ApiError;
 import com.endev.tutoring.dto.CreateLessonRequest;
 import com.endev.tutoring.dto.LessonResponse;
 import com.endev.tutoring.service.LessonRegistrationService;
+import com.endev.tutoring.service.LessonWorkflowService;
 
 import com.endev.tutoring.model.Lesson;
 import com.endev.tutoring.model.LessonId;
@@ -17,6 +18,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -31,13 +33,15 @@ import java.util.UUID;
 // HTTP adapter for lessons. The entity remains behind the registration service.
 @RestController
 @RequestMapping(path = "/api/v1/lessons", produces = MediaType.APPLICATION_JSON_VALUE)
-@Tag(name = "Lessons", description = "Create lessons and find them by UUID")
+@Tag(name = "Lessons", description = "Create lessons, find them by UUID, and confirm them")
 public class LessonController {
 
     private final LessonRegistrationService registration;
+    private final LessonWorkflowService workflow;
 
-    public LessonController(LessonRegistrationService registration) {
+    public LessonController(LessonRegistrationService registration, LessonWorkflowService workflow) {
         this.registration = registration;
+        this.workflow = workflow;
     }
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
@@ -83,5 +87,34 @@ public class LessonController {
     })
     public ResponseEntity<LessonResponse> get(@PathVariable(name = "id") UUID id) {
         return ResponseEntity.ok(LessonResponse.from(registration.find(id)));
+    }
+
+    // The locked action. There is no request body: the actor is the checked token's subject,
+    // so a JSON field named actor or role cannot change who confirmed it.
+    @PostMapping("/{id}/confirm")
+    @Operation(summary = "Confirm a requested lesson (TUTOR only)")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Lesson confirmed; status is CONFIRMED",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = LessonResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Identifier is not a UUID",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ApiError.class))),
+            @ApiResponse(responseCode = "401", description = "valid token required",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ApiError.class))),
+            @ApiResponse(responseCode = "403", description = "not allowed for your role (a STUDENT)",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ApiError.class))),
+            @ApiResponse(responseCode = "404", description = "Lesson not found",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ApiError.class))),
+            @ApiResponse(responseCode = "409", description = "The lesson rules refuse the move",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ApiError.class)))
+    })
+    public ResponseEntity<LessonResponse> confirm(@PathVariable(name = "id") UUID id,
+                                                  Authentication authentication) {
+        return ResponseEntity.ok(LessonResponse.from(workflow.confirm(id, authentication.getName())));
     }
 }

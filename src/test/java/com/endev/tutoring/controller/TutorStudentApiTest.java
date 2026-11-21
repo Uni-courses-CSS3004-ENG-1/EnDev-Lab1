@@ -15,6 +15,7 @@ import org.springframework.test.web.servlet.ResultActions;
 
 import java.util.UUID;
 
+import static com.endev.tutoring.security.TestTokens.student;
 import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.is;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -53,7 +54,7 @@ class TutorStudentApiTest {
     }
 
     private ResultActions postJson(String path, String body) throws Exception {
-        return mvc.perform(post(path).contentType(APPLICATION_JSON).content(body));
+        return mvc.perform(post(path).with(student()).contentType(APPLICATION_JSON).content(body));
     }
 
     private UUID createdId(String path, String body) throws Exception {
@@ -70,7 +71,7 @@ class TutorStudentApiTest {
         void createThenReadByUuid() throws Exception {
             UUID id = createdId("/api/v1/tutors", TUTOR);
 
-            mvc.perform(get("/api/v1/tutors/{id}", id))
+            mvc.perform(get("/api/v1/tutors/{id}", id).with(student()))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.name", is("Dana Smith")))
                     .andExpect(jsonPath("$.hourlyRate", is(25.0)));
@@ -110,7 +111,7 @@ class TutorStudentApiTest {
         @Test
         void unknownUuidIsNotFound() throws Exception {
             UUID missing = UUID.randomUUID();
-            mvc.perform(get("/api/v1/tutors/{id}", missing))
+            mvc.perform(get("/api/v1/tutors/{id}", missing).with(student()))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.message", is("tutor not found: " + missing)));
         }
@@ -124,7 +125,7 @@ class TutorStudentApiTest {
         void createThenReadByUuid() throws Exception {
             UUID id = createdId("/api/v1/students", STUDENT);
 
-            mvc.perform(get("/api/v1/students/{id}", id))
+            mvc.perform(get("/api/v1/students/{id}", id).with(student()))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.email", is("aliya@example.com")));
         }
@@ -137,7 +138,7 @@ class TutorStudentApiTest {
 
         @Test
         void unknownUuidIsNotFound() throws Exception {
-            mvc.perform(get("/api/v1/students/{id}", UUID.randomUUID()))
+            mvc.perform(get("/api/v1/students/{id}", UUID.randomUUID()).with(student()))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.code", is("NOT_FOUND")));
         }
@@ -156,7 +157,7 @@ class TutorStudentApiTest {
                     {"businessKey":"LES-2026-0500","subject":"Algebra","tutorId":"%s","studentId":"%s"}"""
                     .formatted(tutor, student));
 
-            mvc.perform(get("/api/v1/lessons/{id}", lesson))
+            mvc.perform(get("/api/v1/lessons/{id}", lesson).with(student()))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.tutorId", is(tutor.toString())))
                     .andExpect(jsonPath("$.studentId", is(student.toString())));
@@ -189,7 +190,7 @@ class TutorStudentApiTest {
             UUID lesson = createdId("/api/v1/lessons", """
                     {"businessKey":"LES-2026-0503","subject":"Algebra"}""");
 
-            mvc.perform(get("/api/v1/lessons/{id}", lesson))
+            mvc.perform(get("/api/v1/lessons/{id}", lesson).with(student()))
                     .andExpect(jsonPath("$.tutorId").doesNotExist())
                     .andExpect(jsonPath("$.studentId").doesNotExist());
         }

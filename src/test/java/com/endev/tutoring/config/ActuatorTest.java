@@ -12,6 +12,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static com.endev.tutoring.security.TestTokens.tutor;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
@@ -50,17 +51,27 @@ class ActuatorTest {
         }
     }
 
+    // Not in the rules table, so denyAll: 401 without a token, 403 with one. Never the payload.
     @Nested
     @DisplayName("not exposed")
     class NotExposed {
 
         @ParameterizedTest
         @ValueSource(strings = {"env", "heapdump", "beans", "shutdown"})
-        void managementEndpointsAreNotAvailable(String endpoint) throws Exception {
+        void managementEndpointsNeedATokenFirst(String endpoint) throws Exception {
             mvc.perform(get("/actuator/" + endpoint))
-                    .andExpect(status().isNotFound())
+                    .andExpect(status().isUnauthorized())
                     .andExpect(content().string(not(containsString("spring.datasource"))))
                     .andExpect(content().string(not(containsString("css"))));
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"env", "heapdump", "beans", "shutdown"})
+        void managementEndpointsAreForbiddenEvenForATutor(String endpoint) throws Exception {
+            mvc.perform(get("/actuator/" + endpoint).with(tutor()))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code", is("FORBIDDEN")))
+                    .andExpect(content().string(not(containsString("spring.datasource"))));
         }
     }
 }

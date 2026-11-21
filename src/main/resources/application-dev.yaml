@@ -7,6 +7,9 @@ spring:
     password: css
 
 app:
+  jwt:
+    # HS256 signs and checks with this one key. Classroom value, laptop only; 32+ characters.
+    secret: dev-only-tutoring-jwt-secret-change-me-0123456789
   downstream:
     base-url: http://localhost:9090
     timeout: 2s

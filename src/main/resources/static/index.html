@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tutoring marketplace · Sign in</title>
+  <!-- no favicon request: /favicon.ico is not in the rules table -->
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <span class="logo" aria-hidden="true">T</span>
+    <div>
+      <h1>Tutoring marketplace</h1>
+      <p class="sub">Students request lessons. Tutors confirm them and the payment hold is placed.</p>
+    </div>
+  </div>
+  <ul class="roles" aria-label="Roles">
+    <li><span class="chip student">STUDENT</span> creates and reads lessons</li>
+    <li><span class="chip tutor">TUTOR</span> may also confirm a requested lesson</li>
+  </ul>
+</header>
+
+<main class="grid">
+  <section class="card" id="signin-card" aria-labelledby="signin-title">
+    <h2 id="signin-title">Sign in</h2>
+    <form id="login-form" novalidate>
+      <label for="username">Username</label>
+      <input id="username" name="username" autocomplete="username" spellcheck="false">
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password">
+      <button type="submit" class="primary">Sign in</button>
+    </form>
+
+    <div class="devusers">
+      <p class="tag">Dev profile only: classroom users, not real accounts</p>
+      <table>
+        <thead><tr><th>Username</th><th>Password</th><th>Role</th><th></th></tr></thead>
+        <tbody>
+        <tr>
+          <td><code>aliya</code></td><td><code>student-dev</code></td>
+          <td><span class="chip student">STUDENT</span></td>
+          <td><button type="button" class="link" data-user="aliya" data-pass="student-dev">Fill in</button></td>
+        </tr>
+        <tr>
+          <td><code>dana</code></td><td><code>tutor-dev</code></td>
+          <td><span class="chip tutor">TUTOR</span></td>
+          <td><button type="button" class="link" data-user="dana" data-pass="tutor-dev">Fill in</button></td>
+        </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card hidden" id="session-card" aria-labelledby="session-title">
+    <h2 id="session-title">Signed in</h2>
+    <dl class="facts">
+      <dt>Username</dt><dd id="me-username">–</dd>
+      <dt>Role</dt><dd id="me-role">–</dd>
+      <dt>Token</dt><dd>Bearer, expires in <span id="me-expiry">–</span></dd>
+    </dl>
+    <p class="hint">The token lives only in this tab's memory. It is never shown, stored or put in a URL;
+      the username and role above come from <code>GET /api/me</code>.</p>
+    <button type="button" id="logout" class="secondary">Log out</button>
+  </section>
+
+  <section class="card" id="lesson-card" aria-labelledby="lesson-title">
+    <h2 id="lesson-title">Lessons</h2>
+    <form id="create-form" class="row" novalidate>
+      <div>
+        <label for="business-key">Business key</label>
+        <input id="business-key" spellcheck="false">
+      </div>
+      <div>
+        <label for="subject">Subject</label>
+        <input id="subject" value="Algebra">
+      </div>
+      <button type="submit" class="primary">Create lesson</button>
+    </form>
+
+    <label for="lesson-id">Lesson id (UUID)</label>
+    <div class="row">
+      <input id="lesson-id" placeholder="created lessons appear here" spellcheck="false">
+      <span id="lesson-status" class="status">–</span>
+    </div>
+    <div class="actions">
+      <button type="button" id="read" class="secondary">Read lesson</button>
+      <button type="button" id="confirm" class="primary">Confirm lesson</button>
+      <span class="hint">Confirm is <span class="chip tutor">TUTOR</span> only: a student gets 403.</span>
+    </div>
+  </section>
+
+  <section class="card wide" aria-labelledby="result-title">
+    <h2 id="result-title">Last response</h2>
+    <div id="result" class="result" aria-live="polite"><p class="muted">No call yet.</p></div>
+    <h3>This session</h3>
+    <ol id="history" class="history"></ol>
+  </section>
+</main>
+
+<footer>
+  Served by the same Spring Boot process. Every call sends <code>X-Correlation-Id</code>;
+  API calls send <code>Authorization: Bearer</code> while you are signed in.
+</footer>
+
+<script src="/app.js"></script>
+</body>
+</html>

@@ -256,7 +256,9 @@ Boot's own error payload is switched off too, for anything that bypasses the adv
 
 ### Contract and versioning
 
-springdoc publishes the contract at `/v3/api-docs` and the UI at `/swagger-ui.html`. Create lists
+springdoc publishes the contract at `/v3/api-docs` and the UI at `/swagger-ui.html`; both open
+without a token, and the UI's Authorize button sends `Bearer <token>`. Login lists 200, 400 and
+401; confirm lists 200, 400, 401, 403, 404 and 409; `/api/me` lists 200 and 401. Create lists
 201, 400 and 409; get lists 200 and 404. `businessKey` and `subject` are required, and the response
 schema is `LessonResponse`, not the entity.
 
@@ -265,6 +267,163 @@ schema is `LessonResponse`, not the entity.
 | A new optional field old clients can ignore | Renaming `subject` |
 | Clearer message text | 201 becoming 200 without `Location` |
 | | A status token becoming a number |
+
+## Security
+
+Two questions stand in front of every controller. **Who are you?** fails as **401**. **May you do
+this?** fails as **403**. A caller logs in once at `POST /api/v1/auth/login`, receives a signed JWT,
+and sends it as `Authorization: Bearer <token>` on every other call.
+
+### Roles
+
+| Role | Who | May |
+|---|---|---|
+| `STUDENT` (junior) | A student who books lessons | Create and read lessons, tutors and students |
+| `TUTOR` (senior) | A tutor who teaches them | Everything a student may, and confirm a requested lesson |
+
+The locked action is `POST /api/v1/lessons/{id}/confirm`: it moves a lesson from `REQUESTED` to
+`CONFIRMED` and places the payment hold, so only a tutor may do it. It is a status change, not a
+delete; the row stays.
+
+### Rules
+
+The filter chain follows this table from top to bottom. The first matching row wins.
+
+| Action | `STUDENT` | `TUTOR` | No token |
+|---|---|---|---|
+| `POST /api/v1/auth/login` | anyone | anyone | allowed |
+| The auth page: `GET /`, `/index.html`, `/app.css`, `/app.js` | anyone | anyone | allowed |
+| `GET /actuator/health`, `GET /actuator/info` | anyone | anyone | allowed |
+| springdoc: `/swagger-ui.html`, `/swagger-ui/**`, `/v3/api-docs/**` | anyone | anyone | allowed |
+| Confirm a lesson: `POST /api/v1/lessons/{id}/confirm` | **403** | yes | 401 |
+| `GET /api/me` | yes | yes | 401 |
+| Create and read lessons, tutors and students: `/api/v1/**` | yes | yes | 401 |
+| Anything else, including `/actuator/env` and `/actuator/heapdump` | 403 | 403 | 401 |
+
+`SecurityConfig` is this table in code. The confirm rule sits above `/api/v1/**`: with the wide rule
+first, a student would match it and get 200. `anyRequest().denyAll()` closes every path a teammate
+adds later and forgets to list. CSRF is off and sessions are `STATELESS` because the credential is a
+header, never a cookie; there is no form login, no HTTP Basic and no server-side logout.
+
+### Login and the token
+
+`POST /api/v1/auth/login` is the only call that sees a password.
+
+```json
+{ "username": "aliya", "password": "student-dev" }
+```
+
+| Login | Status | Body |
+|---|---|---|
+| Known user, right password | 200 | `{"accessToken":"eyJ...","tokenType":"Bearer","expiresIn":900}` |
+| Unknown user | 401 | `UNAUTHENTICATED`, `bad username or password` |
+| Known user, wrong password | 401 | the same message |
+| Blank username or password | 400 | `VALIDATION`, `username must not be blank` |
+
+The two 401 rows are one message, so the answer does not tell an attacker which names exist.
+`AuthenticationManager` compares the typed password with the BCrypt hash; `TokenService` signs an
+HS256 token that lives 15 minutes (`expiresIn` is seconds). The decoded payload of Aliya's token:
+
+```json
+{ "iss": "tutoring", "sub": "aliya", "roles": ["STUDENT"], "iat": 1795246800, "exp": 1795247700 }
+```
+
+`roles` carries the name without `ROLE_`; the decoder's converter adds the prefix back, so
+`hasRole("TUTOR")` finds `ROLE_TUTOR`. Anyone can read the payload, so it holds no email, phone or
+password. Changing `STUDENT` to `TUTOR` breaks the signature and the call is 401.
+
+### Dev users
+
+`DevUsersConfig` is `@Profile("dev")`: the users exist only on the laptop, in an
+`InMemoryUserDetailsManager`. There is no user table and no Flyway script for accounts. Prod ships
+no users.
+
+| Username | Password | Role |
+|---|---|---|
+| `aliya` | `student-dev` | `STUDENT` |
+| `dana` | `tutor-dev` | `TUTOR` |
+
+The passwords are encoded by the delegating `PasswordEncoder` at start-up, so the manager holds
+`{bcrypt}$2a$10$...` hashes and never the text.
+
+### The secret
+
+| File | `app.jwt.secret` |
+|---|---|
+| `application.yaml` | none (only `app.jwt.issuer: tutoring`) |
+| `application-dev.yaml` | a classroom value of 32+ characters |
+| `application-prod.yaml` | `${CSS_JWT_SECRET}`, no default |
+
+`JwtProperties` is validated: a secret shorter than 32 characters stops the boot, and so does a
+missing `CSS_JWT_SECRET` in prod. `src/main/java` holds no secret literal; `ProfileFilesTest` fails
+if the dev secret or a plain-text password prefix appears there.
+
+### 401 and 403 bodies
+
+401 and 403 are decided in the filters, before any controller, so `@RestControllerAdvice` never
+sees them. `SecurityErrors` is the entry point and the access-denied handler and writes the Lab 4
+error record, with the same `X-Correlation-Id` echo-or-mint rule as the advice.
+
+| Check, in order | Fails as |
+|---|---|
+| No `Authorization: Bearer` (Basic does not count) | 401 `UNAUTHENTICATED`, `valid token required` |
+| Not three base64url pieces | 401 |
+| Signature is not our secret | 401 |
+| Expired, or `iss` is not `tutoring` | 401 |
+| Role is not allowed | 403 `FORBIDDEN`, `not allowed for your role` |
+
+```json
+{ "code": "FORBIDDEN", "message": "not allowed for your role", "correlationId": "demo-7" }
+```
+
+### The locked action
+
+`POST /api/v1/lessons/{id}/confirm` takes the row's UUID and no body. The controller passes
+`Authentication.getName()` to `LessonWorkflowService.confirm`, so a JSON `actor` or `role` field is
+ignored. The method carries `@PreAuthorize("hasRole('TUTOR')")` (enabled by `@EnableMethodSecurity`):
+the same role as the URL rule, a second lock on the same door. The rules in `rule/` stay plain Java.
+
+| Call | Result |
+|---|---|
+| No token | 401; the service method is not called |
+| `STUDENT` | 403; the service method is not called and the row stays `REQUESTED` |
+| `TUTOR`, lesson `REQUESTED` | 200 with `"status":"CONFIRMED"`; the payment hold is placed; the log says `lesson LES-2026-0042 confirmed by dana` |
+| `TUTOR`, the rules refuse (already `CONFIRMED`, `COMPLETED` or `CANCELLED`) | 409 `INVALID_TRANSITION`; the row does not change |
+| `TUTOR`, unknown UUID | 404 `NOT_FOUND` |
+
+### Who am I
+
+`GET /api/me` returns what the filter put into the `SecurityContext` for this request:
+
+```json
+{ "username": "aliya", "authorities": ["ROLE_STUDENT"] }
+```
+
+### The auth page
+
+`http://localhost:8080/` is our own page, served by the same Spring Boot process from
+`src/main/resources/static/` (`index.html`, `app.css`, `app.js`: HTML, CSS and one script, no
+library). Same origin, so there is no CORS bean. `formLogin` stays off, so Spring's "Please sign in"
+page never appears.
+
+- Before login it shows the product, the two roles and the two dev users, labelled dev only.
+- The form posts JSON to `/api/v1/auth/login`; the password field is `type="password"`.
+- The token is kept in one JavaScript variable inside the script's closure: not in `localStorage`,
+  `sessionStorage`, a cookie, the URL or the page text. The page shows the username and role from
+  `GET /api/me` and a 15-minute countdown, never the token.
+- Every call sends `X-Correlation-Id`. On 400, 401, 403 and 409 the page shows `code`, `message` and
+  `correlationId` from the JSON and nothing else.
+- Log out drops the variable and shows the form again; the next call from the page is 401.
+
+| Step in the browser | Result on the page |
+|---|---|
+| Open `/` | The tutoring marketplace page, not a Spring login |
+| Sign in as `aliya` with a wrong password | 401 `UNAUTHENTICATED`, `bad username or password`; the form stays |
+| Sign in as `aliya` / `student-dev` | `aliya`, role `STUDENT`, 15:00; no token on the page |
+| Create lesson | 201, status `REQUESTED` |
+| Confirm lesson | 403 `FORBIDDEN`; "the row did not change: status is still REQUESTED" |
+| Log out, sign in as `dana` / `tutor-dev`, confirm | 200, status `CONFIRMED` |
+| Log out, read lesson | 401 `UNAUTHENTICATED`, `valid token required` |
 
 ## Configuration and profiles
 
@@ -275,7 +434,7 @@ Nothing that varies between a laptop and a server is a Java string. `src/main/ja
 |---|---|
 | `application.yaml` | What every run shares: `ddl-auto: validate`, `open-in-view: false`, Flyway, the error leak settings, actuator exposure, and `spring.profiles.default: dev`. No URL and no password. |
 | `application-dev.yaml` | The laptop: PostgreSQL `localhost:5432/css`, user and password `css` (the classroom default), payment provider at `http://localhost:9090` with a `2s` timeout. |
-| `application-prod.yaml` | Reads `CSS_DB_URL`, `CSS_DB_USER`, `CSS_DB_PASSWORD` and `CSS_DOWNSTREAM_URL` from the environment. No default secret. |
+| `application-prod.yaml` | Reads `CSS_DB_URL`, `CSS_DB_USER`, `CSS_DB_PASSWORD`, `CSS_DOWNSTREAM_URL` and `CSS_JWT_SECRET` from the environment. No default secret. |
 
 A boot with no flag uses `dev`. Production sets `SPRING_PROFILES_ACTIVE=prod` and the variables;
 the committed files never set an active profile.
@@ -295,7 +454,7 @@ datasource URL.
 |---|---|
 | `GET /actuator/health` | **200** `{"status":"UP"}` |
 | `GET /actuator/info` | **200** with the product name |
-| `GET /actuator/env`, `/heapdump`, `/beans`, `/shutdown` | **404** `NOT_FOUND`, not exposed |
+| `GET /actuator/env`, `/heapdump`, `/beans`, `/shutdown` | **401** without a token, **403** with one; never the payload |
 
 ## Tests
 
@@ -324,6 +483,15 @@ datasource URL.
 | `ProfileFilesTest` | Unit, reads the yaml text | The shared file holds no URL or password and defaults to `dev`; dev is localhost; prod is only env placeholders; the error leak and actuator exposure settings; no URL literal in `src/main/java`. |
 | `DevProfileTest` | `@SpringBootTest` on `dev` | The bound values after a real boot: `http://localhost:9090`, 2 seconds, the localhost `css` database, and the same properties inside the payment adapter. No socket is opened. |
 | `ActuatorTest` | `@SpringBootTest` + MockMvc | Health is 200 UP without details, info names the product, and `env`, `heapdump`, `beans`, `shutdown` are 404. |
+| `SecurityRulesTest` | `@WebMvcTest` + `SecurityConfig`, services mocked, `jwt()` | The README rules table: no token 401 `UNAUTHENTICATED`, a student's confirm 403 `FORBIDDEN`, a tutor's confirm 200 with the token's subject as actor, a refused move 409, `/api/me`, health open; refused calls never reach the mocks. |
+| `AuthControllerTest` | `@WebMvcTest` + `SecurityConfig` | Login 200 with `Bearer` and 900, both bad logins the same 401, blank fields 400 without a password check. |
+| `TokenServiceTest` | Unit, no web layer | A token issued with a test secret decodes with the same secret: subject, `roles` without `ROLE_`, `iss`, 15 minutes; another issuer or secret rejects it. |
+| `DevUsersTest` | Unit | BCrypt hashes, two hashes of one password differ, `ROLE_` prefixes, one exception for wrong password and unknown user. |
+| `TokenCheckTest` | `@SpringBootTest` + MockMvc, real decoder | Each row of the token check: no header, `Bearer hello`, another secret, expired, `iss` helpdesk, Basic, an unknown role, a path outside the table. |
+| `LoginApiTest` | `@SpringBootTest` + MockMvc | The real dev users and signer: dana's token decodes to `TUTOR`; the two bad logins are byte-for-byte the same body. |
+| `LessonWorkflowServiceTest` | `@SpringBootTest` on PostgreSQL | `@PreAuthorize` without HTTP: a student and an anonymous caller are denied and the row stays; a tutor confirms; a second confirm or a cancelled lesson is refused. |
+| `AuthFlowTest` | `@SpringBootTest` + MockMvc on PostgreSQL | The marker's path with real tokens: 403 and the row unchanged, 200 `CONFIRMED`, 409, 401 after logout; the log names dana and holds no token or password. |
+| `AuthPageTest` | `@SpringBootTest` + MockMvc | `/` is our page with the product, roles and dev users and no Spring login form; the page files need no token, the script stores nothing; `/api` stays 401. |
 | `TutorStudentApiTest` | `@SpringBootTest` + MockMvc on PostgreSQL | Tutors and students: create with `Location`, read by UUID, 409 on a taken email (one row stays), 400 on a bad email or rate, 404 on an unknown UUID. Lessons keep `tutorId`/`studentId` and the tutor's name; an unknown tutor or student is 404 and writes no lesson. |
 
 Database tests run `DELETE FROM lesson` in `@BeforeEach` so each method starts with no lesson rows.
@@ -372,16 +540,25 @@ Current version of schema "public": 2
 Schema "public" is up to date. No migration necessary.
 ```
 
-Try the API and the health check on a running app:
+Try the API and the health check on a running app. Every API call except login needs a token:
 
 ```text
+STUDENT=$(curl -s -X POST localhost:8080/api/v1/auth/login -H 'Content-Type: application/json' \
+     -d '{"username":"aliya","password":"student-dev"}' | jq -r .accessToken)
+TUTOR=$(curl -s -X POST localhost:8080/api/v1/auth/login -H 'Content-Type: application/json' \
+     -d '{"username":"dana","password":"tutor-dev"}' | jq -r .accessToken)
+
 curl -i -X POST localhost:8080/api/v1/lessons -H 'Content-Type: application/json' \
-     -d '{"businessKey":"LES-2026-0100","subject":"Algebra"}'                         # 201 + Location
-curl -i -X POST localhost:8080/api/v1/lessons -H 'Content-Type: application/json' \
-     -H 'X-Correlation-Id: demo-1' -d '{"businessKey":"LES-2026-0100","subject":"Algebra"}'  # 409, correlationId demo-1
-curl -i localhost:8080/api/v1/lessons/LES-2026-0100                                 # 400 id must be a UUID
+     -d '{"businessKey":"LES-2026-0100","subject":"Algebra"}'                         # 401, no token
+curl -i -X POST localhost:8080/api/v1/lessons -H "Authorization: Bearer $STUDENT" \
+     -H 'Content-Type: application/json' -d '{"businessKey":"LES-2026-0100","subject":"Algebra"}'  # 201 + Location
+curl -i -X POST localhost:8080/api/v1/lessons -H "Authorization: Bearer $STUDENT" -H 'X-Correlation-Id: demo-1' \
+     -H 'Content-Type: application/json' -d '{"businessKey":"LES-2026-0100","subject":"Algebra"}'  # 409, correlationId demo-1
+curl -i localhost:8080/api/me -H "Authorization: Bearer $STUDENT"                   # 200 aliya, ROLE_STUDENT
+curl -i -X POST localhost:8080/api/v1/lessons/<uuid>/confirm -H "Authorization: Bearer $STUDENT"  # 403, still REQUESTED
+curl -i -X POST localhost:8080/api/v1/lessons/<uuid>/confirm -H "Authorization: Bearer $TUTOR"    # 200 CONFIRMED
 curl -i localhost:8080/actuator/health                                              # 200 {"status":"UP"}
-curl -i localhost:8080/actuator/env                                                 # 404
+curl -i localhost:8080/actuator/env                                                 # 401
 ```
 
 The contract is at `http://localhost:8080/swagger-ui.html`.
@@ -391,7 +568,7 @@ Production uses the `prod` profile and reads everything that varies from the env
 ```text
 SPRING_PROFILES_ACTIVE=prod \
 CSS_DB_URL=jdbc:postgresql://<host>:5432/<db> CSS_DB_USER=<user> CSS_DB_PASSWORD=<password> \
-CSS_DOWNSTREAM_URL=https://<payment-provider> \
+CSS_DOWNSTREAM_URL=https://<payment-provider> CSS_JWT_SECRET=<32+ random characters> \
 java -jar target/tutoring-marketplace-1.0-SNAPSHOT.jar
 ```
 

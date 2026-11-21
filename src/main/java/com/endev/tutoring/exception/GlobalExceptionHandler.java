@@ -10,6 +10,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -20,7 +22,6 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.Comparator;
-import java.util.UUID;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -66,6 +67,24 @@ public class GlobalExceptionHandler {
         return error(HttpStatus.CONFLICT, "DUPLICATE", exception.getMessage(), request);
     }
 
+    // the lesson rules refused the status change; the row did not move
+    @ExceptionHandler(LessonTransitionException.class)
+    ResponseEntity<ApiError> refusedMove(LessonTransitionException exception, HttpServletRequest request) {
+        return error(HttpStatus.CONFLICT, "INVALID_TRANSITION", exception.getMessage(), request);
+    }
+
+    // @PreAuthorize said no inside the controller call; the filters answer the URL rule the same way
+    @ExceptionHandler(AccessDeniedException.class)
+    ResponseEntity<ApiError> wrongRole(HttpServletRequest request) {
+        return error(HttpStatus.FORBIDDEN, "FORBIDDEN", "not allowed for your role", request);
+    }
+
+    // login only: unknown user and wrong password are the same answer
+    @ExceptionHandler(AuthenticationException.class)
+    ResponseEntity<ApiError> badLogin(HttpServletRequest request) {
+        return error(HttpStatus.UNAUTHORIZED, "UNAUTHENTICATED", "bad username or password", request);
+    }
+
     @ExceptionHandler(NoResourceFoundException.class)
     ResponseEntity<ApiError> noResource(HttpServletRequest request) {
         return error(HttpStatus.NOT_FOUND, "NOT_FOUND", "no such path", request);
@@ -90,8 +109,7 @@ public class GlobalExceptionHandler {
     }
 
     private String correlationId(HttpServletRequest request) {
-        String value = request.getHeader("X-Correlation-Id");
-        return value == null || value.isBlank() ? UUID.randomUUID().toString() : value;
+        return CorrelationId.of(request);
     }
 
     private ResponseEntity<ApiError> response(HttpStatus status, ApiError body) {
