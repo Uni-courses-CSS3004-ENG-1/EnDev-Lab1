@@ -399,6 +399,32 @@ the same role as the URL rule, a second lock on the same door. The rules in `rul
 { "username": "aliya", "authorities": ["ROLE_STUDENT"] }
 ```
 
+### The auth page
+
+`http://localhost:8080/` is our own page, served by the same Spring Boot process from
+`src/main/resources/static/` (`index.html`, `app.css`, `app.js`: HTML, CSS and one script, no
+library). Same origin, so there is no CORS bean. `formLogin` stays off, so Spring's "Please sign in"
+page never appears.
+
+- Before login it shows the product, the two roles and the two dev users, labelled dev only.
+- The form posts JSON to `/api/v1/auth/login`; the password field is `type="password"`.
+- The token is kept in one JavaScript variable inside the script's closure: not in `localStorage`,
+  `sessionStorage`, a cookie, the URL or the page text. The page shows the username and role from
+  `GET /api/me` and a 15-minute countdown, never the token.
+- Every call sends `X-Correlation-Id`. On 400, 401, 403 and 409 the page shows `code`, `message` and
+  `correlationId` from the JSON and nothing else.
+- Log out drops the variable and shows the form again; the next call from the page is 401.
+
+| Step in the browser | Result on the page |
+|---|---|
+| Open `/` | The tutoring marketplace page, not a Spring login |
+| Sign in as `aliya` with a wrong password | 401 `UNAUTHENTICATED`, `bad username or password`; the form stays |
+| Sign in as `aliya` / `student-dev` | `aliya`, role `STUDENT`, 15:00; no token on the page |
+| Create lesson | 201, status `REQUESTED` |
+| Confirm lesson | 403 `FORBIDDEN`; "the row did not change: status is still REQUESTED" |
+| Log out, sign in as `dana` / `tutor-dev`, confirm | 200, status `CONFIRMED` |
+| Log out, read lesson | 401 `UNAUTHENTICATED`, `valid token required` |
+
 ## Configuration and profiles
 
 Nothing that varies between a laptop and a server is a Java string. `src/main/java` contains no
@@ -465,6 +491,7 @@ datasource URL.
 | `LoginApiTest` | `@SpringBootTest` + MockMvc | The real dev users and signer: dana's token decodes to `TUTOR`; the two bad logins are byte-for-byte the same body. |
 | `LessonWorkflowServiceTest` | `@SpringBootTest` on PostgreSQL | `@PreAuthorize` without HTTP: a student and an anonymous caller are denied and the row stays; a tutor confirms; a second confirm or a cancelled lesson is refused. |
 | `AuthFlowTest` | `@SpringBootTest` + MockMvc on PostgreSQL | The marker's path with real tokens: 403 and the row unchanged, 200 `CONFIRMED`, 409, 401 after logout; the log names dana and holds no token or password. |
+| `AuthPageTest` | `@SpringBootTest` + MockMvc | `/` is our page with the product, roles and dev users and no Spring login form; the page files need no token, the script stores nothing; `/api` stays 401. |
 | `TutorStudentApiTest` | `@SpringBootTest` + MockMvc on PostgreSQL | Tutors and students: create with `Location`, read by UUID, 409 on a taken email (one row stays), 400 on a bad email or rate, 404 on an unknown UUID. Lessons keep `tutorId`/`studentId` and the tutor's name; an unknown tutor or student is 404 and writes no lesson. |
 
 Database tests run `DELETE FROM lesson` in `@BeforeEach` so each method starts with no lesson rows.
