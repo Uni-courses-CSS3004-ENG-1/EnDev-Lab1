@@ -20,7 +20,6 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.Comparator;
-import java.util.UUID;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -90,8 +89,7 @@ public class GlobalExceptionHandler {
     }
 
     private String correlationId(HttpServletRequest request) {
-        String value = request.getHeader("X-Correlation-Id");
-        return value == null || value.isBlank() ? UUID.randomUUID().toString() : value;
+        return CorrelationId.of(request);
     }
 
     private ResponseEntity<ApiError> response(HttpStatus status, ApiError body) {
