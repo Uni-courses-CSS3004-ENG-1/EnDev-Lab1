@@ -1,6 +1,7 @@
 package com.endev.tutoring.controller;
 
 import com.endev.tutoring.service.LessonRegistrationService;
+import com.endev.tutoring.service.LessonWorkflowService;
 
 import com.endev.tutoring.TutoringApplication;
 import com.endev.tutoring.exception.DuplicateLessonException;
@@ -62,6 +63,9 @@ class LessonControllerTest {
 
     @MockitoBean
     private LessonRegistrationService registration;
+
+    @MockitoBean
+    private LessonWorkflowService workflow;
 
     // the slice has no JwtConfig; jwt() skips decoding, but the chain still wants the bean
     @MockitoBean
