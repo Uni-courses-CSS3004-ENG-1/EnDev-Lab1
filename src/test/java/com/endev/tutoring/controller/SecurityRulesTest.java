@@ -28,6 +28,7 @@ import java.util.UUID;
 
 import static com.endev.tutoring.security.TestTokens.student;
 import static com.endev.tutoring.security.TestTokens.tutor;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
@@ -42,7 +43,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 // The README rules table as a web slice: the real SecurityConfig, the services mocked, and
 // jwt() as the token. No jwt() means anonymous. The mocks prove a refused call never reaches them.
-@WebMvcTest(LessonController.class)
+@WebMvcTest({LessonController.class, MeController.class})
 @ContextConfiguration(classes = TutoringApplication.class)
 @Import(SecurityConfig.class)
 @ImportAutoConfiguration({EndpointAutoConfiguration.class, WebEndpointAutoConfiguration.class,
@@ -105,6 +106,34 @@ class SecurityRulesTest {
             mvc.perform(get("/actuator/health"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.status", is("UP")));
+        }
+    }
+
+    @Nested
+    @DisplayName("GET /api/me")
+    class Me {
+
+        @Test
+        void returnsTheUsernameAndAuthoritiesFromTheToken() throws Exception {
+            mvc.perform(get("/api/me").with(student()))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.username", is("aliya")))
+                    .andExpect(jsonPath("$.authorities", contains("ROLE_STUDENT")));
+        }
+
+        @Test
+        void aTutorTokenIsATutor() throws Exception {
+            mvc.perform(get("/api/me").with(tutor()))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.username", is("dana")))
+                    .andExpect(jsonPath("$.authorities", contains("ROLE_TUTOR")));
+        }
+
+        @Test
+        void noTokenIs401() throws Exception {
+            mvc.perform(get("/api/me"))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.code", is("UNAUTHENTICATED")));
         }
     }
 
