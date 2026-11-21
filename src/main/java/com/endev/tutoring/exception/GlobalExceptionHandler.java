@@ -10,6 +10,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
@@ -64,6 +65,18 @@ public class GlobalExceptionHandler {
     @ExceptionHandler({DuplicateLessonException.class, DuplicateEmailException.class})
     ResponseEntity<ApiError> duplicate(RuntimeException exception, HttpServletRequest request) {
         return error(HttpStatus.CONFLICT, "DUPLICATE", exception.getMessage(), request);
+    }
+
+    // the lesson rules refused the status change; the row did not move
+    @ExceptionHandler(LessonTransitionException.class)
+    ResponseEntity<ApiError> refusedMove(LessonTransitionException exception, HttpServletRequest request) {
+        return error(HttpStatus.CONFLICT, "INVALID_TRANSITION", exception.getMessage(), request);
+    }
+
+    // @PreAuthorize said no inside the controller call; the filters answer the URL rule the same way
+    @ExceptionHandler(AccessDeniedException.class)
+    ResponseEntity<ApiError> wrongRole(HttpServletRequest request) {
+        return error(HttpStatus.FORBIDDEN, "FORBIDDEN", "not allowed for your role", request);
     }
 
     // login only: unknown user and wrong password are the same answer
