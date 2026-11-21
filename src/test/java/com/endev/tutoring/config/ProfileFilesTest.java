@@ -47,6 +47,8 @@ class ProfileFilesTest {
                     () -> assertNull(shared.getProperty("spring.datasource.url")),
                     () -> assertNull(shared.getProperty("spring.datasource.password")),
                     () -> assertNull(shared.getProperty("app.downstream.base-url")),
+                    () -> assertNull(shared.getProperty("app.jwt.secret"), "the JWT secret is per profile"),
+                    () -> assertEquals("tutoring", text(shared, "app.jwt.issuer")),
                     () -> assertEquals("validate", text(shared, "spring.jpa.hibernate.ddl-auto")),
                     () -> assertEquals("false", text(shared, "spring.jpa.open-in-view")));
         }
@@ -84,6 +86,12 @@ class ProfileFilesTest {
                     () -> assertEquals("http://localhost:9090", text(dev, "app.downstream.base-url")),
                     () -> assertEquals("2s", text(dev, "app.downstream.timeout")));
         }
+
+        @Test
+        void holdsAClassroomJwtSecretOfAtLeast32Characters() throws IOException {
+            String secret = text(yaml("application-dev.yaml"), "app.jwt.secret");
+            assertTrue(secret != null && secret.length() >= 32, "dev secret is too short");
+        }
     }
 
     @Nested
@@ -97,7 +105,8 @@ class ProfileFilesTest {
                     () -> assertEquals("${CSS_DB_URL}", text(prod, "spring.datasource.url")),
                     () -> assertEquals("${CSS_DB_USER}", text(prod, "spring.datasource.username")),
                     () -> assertEquals("${CSS_DB_PASSWORD}", text(prod, "spring.datasource.password")),
-                    () -> assertEquals("${CSS_DOWNSTREAM_URL}", text(prod, "app.downstream.base-url")));
+                    () -> assertEquals("${CSS_DOWNSTREAM_URL}", text(prod, "app.downstream.base-url")),
+                    () -> assertEquals("${CSS_JWT_SECRET}", text(prod, "app.jwt.secret")));
         }
     }
 
@@ -118,11 +127,31 @@ class ProfileFilesTest {
             }
             assertTrue(offenders.isEmpty(), "URL literals belong in yaml: " + offenders);
         }
+
+        // a reviewer who greps for the dev secret finds it in yaml only, and no password is stored as text
+        @Test
+        void hasNoJwtSecretAndNoNoopPassword() throws IOException {
+            String devSecret = text(yaml("application-dev.yaml"), "app.jwt.secret");
+            List<Path> offenders;
+            try (Stream<Path> files = Files.walk(Path.of("src/main/java"))) {
+                offenders = files.filter(path -> path.toString().endsWith(".java"))
+                        .filter(path -> {
+                            String source = read(path);
+                            return source.contains(devSecret) || source.contains("{noop}");
+                        })
+                        .toList();
+            }
+            assertTrue(offenders.isEmpty(), "secret or {noop} in Java: " + offenders);
+        }
     }
 
     private static boolean containsUrlLiteral(Path file) {
+        return JavaSources.URL_LITERAL.matcher(read(file)).find();
+    }
+
+    private static String read(Path file) {
         try {
-            return JavaSources.URL_LITERAL.matcher(Files.readString(file)).find();
+            return Files.readString(file);
         } catch (IOException e) {
             throw new IllegalStateException("cannot read " + file, e);
         }
