@@ -1,0 +1,348 @@
+### Tutoring marketplace — one request per error path (IntelliJ HTTP Client)
+#
+# 1. docker compose up -d
+# 2. mvn spring-boot:run          (dev profile, port 8080)
+# 3. Run auth.http first: it stores studentToken (aliya, STUDENT) and tutorToken (dana, TUTOR).
+# 4. Run this file top to bottom. It makes its own rows, so it passes on every run.
+#
+# To watch a handler work, run the app in Debug, put a breakpoint in the method named in the title
+# and click the green ▶ next to that request. Part A is Lab 5 (filter chain, SecurityErrors);
+# part B is Lab 4 (GlobalExceptionHandler), now sent with a token.
+#
+# Every error body is the same three fields: code, message, correlationId.
+
+@host = http://localhost:8080
+@unknownId = 7d3f0a52-1c2b-4c55-9a51-2f9d0c1e4b6a
+
+
+### ─── Part A: who is calling, and may they (Lab 5) ───
+
+
+### A1. SecurityErrors.commence -> 401, no Authorization header
+GET {{host}}/api/v1/tutors/{{unknownId}}
+X-Correlation-Id: http-err-no-token
+
+> {%
+    client.test("401", () => client.assert(response.status === 401, "status " + response.status));
+    client.test("code UNAUTHENTICATED", () => client.assert(response.body.code === "UNAUTHENTICATED"));
+    client.test("valid token required", () => client.assert(response.body.message === "valid token required"));
+    client.test("correlation id echoed", () => client.assert(response.body.correlationId === "http-err-no-token"));
+%}
+
+
+### A2. SecurityErrors.commence -> 401, the token is not three base64url pieces
+GET {{host}}/api/v1/tutors/{{unknownId}}
+Authorization: Bearer hello
+
+> {%
+    client.test("401", () => client.assert(response.status === 401, "status " + response.status));
+    client.test("valid token required", () => client.assert(response.body.message === "valid token required"));
+%}
+
+
+### A3. SecurityErrors.commence -> 401, HTTP Basic is not a way to call the API
+# aliya:student-dev in Base64 (dev-only classroom user): the right password still gets 401.
+GET {{host}}/api/v1/tutors/{{unknownId}}
+Authorization: Basic YWxpeWE6c3R1ZGVudC1kZXY=
+
+> {%
+    client.test("401", () => client.assert(response.status === 401, "status " + response.status));
+    client.test("code UNAUTHENTICATED", () => client.assert(response.body.code === "UNAUTHENTICATED"));
+%}
+
+
+### A4. GlobalExceptionHandler.badLogin -> 401, wrong password
+POST {{host}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "dana",
+  "password": "wrong"
+}
+
+> {%
+    client.test("401", () => client.assert(response.status === 401, "status " + response.status));
+    client.test("bad username or password", () =>
+        client.assert(response.body.message === "bad username or password", response.body.message));
+%}
+
+
+### A5. (setup) the student creates a lesson to confirm -> 201 REQUESTED
+POST {{host}}/api/v1/lessons
+Authorization: Bearer {{studentToken}}
+Content-Type: application/json
+
+{
+  "businessKey": "LES-ERR-{{$timestamp}}",
+  "subject": "Algebra"
+}
+
+> {%
+    client.global.set("confirmLessonId", response.body.id);
+    client.test("201 Created", () => client.assert(response.status === 201, "status " + response.status));
+    client.test("starts REQUESTED", () => client.assert(response.body.status === "REQUESTED"));
+%}
+
+
+### A6. SecurityErrors.handle -> 403, a STUDENT confirms
+POST {{host}}/api/v1/lessons/{{confirmLessonId}}/confirm
+Authorization: Bearer {{studentToken}}
+X-Correlation-Id: http-err-student-confirm
+
+> {%
+    client.test("403", () => client.assert(response.status === 403, "status " + response.status));
+    client.test("code FORBIDDEN", () => client.assert(response.body.code === "FORBIDDEN"));
+    client.test("not allowed for your role", () =>
+        client.assert(response.body.message === "not allowed for your role", response.body.message));
+    client.test("correlation id echoed", () =>
+        client.assert(response.body.correlationId === "http-err-student-confirm"));
+%}
+
+
+### A7. After the 403 the row did not move -> still REQUESTED
+GET {{host}}/api/v1/lessons/{{confirmLessonId}}
+Authorization: Bearer {{studentToken}}
+
+> {%
+    client.test("200 OK", () => client.assert(response.status === 200, "status " + response.status));
+    client.test("still REQUESTED", () => client.assert(response.body.status === "REQUESTED", response.body.status));
+%}
+
+
+### A8. The TUTOR confirms -> 200 CONFIRMED (the actor is the token's subject, not a JSON field)
+POST {{host}}/api/v1/lessons/{{confirmLessonId}}/confirm
+Authorization: Bearer {{tutorToken}}
+Content-Type: application/json
+
+{
+  "actor": "aliya",
+  "role": "STUDENT"
+}
+
+> {%
+    client.test("200 OK", () => client.assert(response.status === 200, "status " + response.status));
+    client.test("now CONFIRMED", () => client.assert(response.body.status === "CONFIRMED", response.body.status));
+%}
+
+
+### A9. GlobalExceptionHandler.refusedMove -> 409, confirming twice
+POST {{host}}/api/v1/lessons/{{confirmLessonId}}/confirm
+Authorization: Bearer {{tutorToken}}
+
+> {%
+    client.test("409", () => client.assert(response.status === 409, "status " + response.status));
+    client.test("code INVALID_TRANSITION", () =>
+        client.assert(response.body.code === "INVALID_TRANSITION", response.body.code));
+%}
+
+
+### A10. GlobalExceptionHandler.notFound -> 404, the tutor confirms an unknown UUID
+POST {{host}}/api/v1/lessons/{{unknownId}}/confirm
+Authorization: Bearer {{tutorToken}}
+
+> {%
+    client.test("404", () => client.assert(response.status === 404, "status " + response.status));
+    client.test("code NOT_FOUND", () => client.assert(response.body.code === "NOT_FOUND"));
+%}
+
+
+### A11. SecurityErrors.commence -> 401, confirm with no token
+POST {{host}}/api/v1/lessons/{{confirmLessonId}}/confirm
+
+> {%
+    client.test("401", () => client.assert(response.status === 401, "status " + response.status));
+    client.test("code UNAUTHENTICATED", () => client.assert(response.body.code === "UNAUTHENTICATED"));
+%}
+
+
+### A12. SecurityErrors.handle -> 403, a path outside the rules table (denyAll), even with a token
+GET {{host}}/actuator/env
+Authorization: Bearer {{tutorToken}}
+
+> {%
+    client.test("403", () => client.assert(response.status === 403, "status " + response.status));
+    client.test("code FORBIDDEN", () => client.assert(response.body.code === "FORBIDDEN"));
+%}
+
+
+### ─── Part B: GlobalExceptionHandler (Lab 4), now with a token ───
+
+
+### B1. validation -> 400 (subject is blank, @Valid fails before the controller body runs)
+POST {{host}}/api/v1/lessons
+Authorization: Bearer {{studentToken}}
+Content-Type: application/json
+
+{
+  "businessKey": "LES-ERR-BLANK",
+  "subject": ""
+}
+
+> {%
+    client.test("400", () => client.assert(response.status === 400, "status " + response.status));
+    client.test("code VALIDATION", () => client.assert(response.body.code === "VALIDATION"));
+    client.test("subject must not be blank", () =>
+        client.assert(response.body.message === "subject must not be blank", response.body.message));
+%}
+
+
+### B2. typeMismatch -> 400 ("not-a-uuid" cannot become a UUID)
+GET {{host}}/api/v1/tutors/not-a-uuid
+Authorization: Bearer {{studentToken}}
+
+> {%
+    client.test("400", () => client.assert(response.status === 400, "status " + response.status));
+    client.test("id must be a UUID", () => client.assert(response.body.message === "id must be a UUID", response.body.message));
+%}
+
+
+### B3. unreadable -> 400 (the body is not JSON)
+POST {{host}}/api/v1/lessons
+Authorization: Bearer {{studentToken}}
+Content-Type: application/json
+
+{broken
+
+> {%
+    client.test("400", () => client.assert(response.status === 400, "status " + response.status));
+    client.test("body must be JSON", () => client.assert(response.body.message === "body must be JSON", response.body.message));
+%}
+
+
+### B4. unsupportedMediaType -> 415 (text/plain instead of application/json)
+POST {{host}}/api/v1/lessons
+Authorization: Bearer {{studentToken}}
+Content-Type: text/plain
+
+hello
+
+> {%
+    client.test("415", () => client.assert(response.status === 415, "status " + response.status));
+    client.test("code UNSUPPORTED", () => client.assert(response.body.code === "UNSUPPORTED"));
+%}
+
+
+### B5a. notFound -> 404 (TutorService.find throws TutorNotFoundException)
+GET {{host}}/api/v1/tutors/{{unknownId}}
+Authorization: Bearer {{studentToken}}
+
+> {%
+    client.test("404", () => client.assert(response.status === 404, "status " + response.status));
+    client.test("code NOT_FOUND", () => client.assert(response.body.code === "NOT_FOUND"));
+%}
+
+
+### B5b. notFound -> 404 (LessonRegistrationService.create throws TutorNotFoundException)
+POST {{host}}/api/v1/lessons
+Authorization: Bearer {{studentToken}}
+Content-Type: application/json
+
+{
+  "businessKey": "LES-ERR-5B",
+  "subject": "Algebra",
+  "tutorId": "{{unknownId}}"
+}
+
+> {%
+    client.test("404", () => client.assert(response.status === 404, "status " + response.status));
+    client.test("code NOT_FOUND", () => client.assert(response.body.code === "NOT_FOUND"));
+%}
+
+
+### B6a. (setup) a lesson whose key we repeat next -> 201
+POST {{host}}/api/v1/lessons
+Authorization: Bearer {{studentToken}}
+Content-Type: application/json
+
+{
+  "businessKey": "LES-DUP-{{$timestamp}}",
+  "subject": "Algebra"
+}
+
+> {%
+    client.global.set("dupBusinessKey", response.body.businessKey);
+    client.test("201 Created", () => client.assert(response.status === 201, "status " + response.status));
+%}
+
+
+### B6b. duplicate -> 409 (same business key -> DuplicateLessonException)
+POST {{host}}/api/v1/lessons
+Authorization: Bearer {{studentToken}}
+Content-Type: application/json
+
+{
+  "businessKey": "{{dupBusinessKey}}",
+  "subject": "Algebra"
+}
+
+> {%
+    client.test("409", () => client.assert(response.status === 409, "status " + response.status));
+    client.test("code DUPLICATE", () => client.assert(response.body.code === "DUPLICATE"));
+%}
+
+
+### B6c. (setup) a tutor whose email we repeat next -> 201
+POST {{host}}/api/v1/tutors
+Authorization: Bearer {{studentToken}}
+Content-Type: application/json
+
+{
+  "name": "Dana Again",
+  "email": "dana.{{$timestamp}}@example.com",
+  "subject": "Algebra",
+  "hourlyRate": 25.00
+}
+
+> {%
+    client.global.set("dupEmail", response.body.email);
+    client.test("201 Created", () => client.assert(response.status === 201, "status " + response.status));
+%}
+
+
+### B6d. duplicate -> 409 (email already taken -> DuplicateEmailException)
+POST {{host}}/api/v1/tutors
+Authorization: Bearer {{studentToken}}
+Content-Type: application/json
+
+{
+  "name": "Dana Again",
+  "email": "{{dupEmail}}",
+  "subject": "Algebra",
+  "hourlyRate": 25.00
+}
+
+> {%
+    client.test("409", () => client.assert(response.status === 409, "status " + response.status));
+    client.test("code DUPLICATE", () => client.assert(response.body.code === "DUPLICATE"));
+%}
+
+
+### B7. noResource -> 404 (no controller has this URL; the token gets it past the chain)
+GET {{host}}/api/v1/nothing
+Authorization: Bearer {{studentToken}}
+
+> {%
+    client.test("404", () => client.assert(response.status === 404, "status " + response.status));
+%}
+
+
+### B8. methodNotAllowed -> 405 (/tutors exists, but not for DELETE)
+DELETE {{host}}/api/v1/tutors
+Authorization: Bearer {{studentToken}}
+
+> {%
+    client.test("405", () => client.assert(response.status === 405, "status " + response.status));
+    client.test("code METHOD_NOT_ALLOWED", () => client.assert(response.body.code === "METHOD_NOT_ALLOWED"));
+%}
+
+
+### B9. correlationId -> your header comes back in the body
+GET {{host}}/api/v1/nothing
+Authorization: Bearer {{studentToken}}
+X-Correlation-Id: my-trace-123
+
+> {%
+    client.test("correlation id echoed", () => client.assert(response.body.correlationId === "my-trace-123"));
+    client.test("exactly code, message, correlationId", () =>
+        client.assert(Object.keys(response.body).sort().join() === "code,correlationId,message"));
+%}
