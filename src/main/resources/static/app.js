@@ -62,6 +62,9 @@
     const text = await response.text();
     let data = null;
     try { data = text ? JSON.parse(text) : null; } catch (notJson) { data = null; }
+    if (response.status === 401 && accessToken && path !== '/api/v1/auth/login') {
+      dropToken('The server rejected this token. Log in again.', 'Token rejected → token dropped');
+    }
     return { status: response.status, data, correlationId };
   }
 
@@ -157,8 +160,28 @@
     els.username.focus();
   }
 
+  function dropToken(message, historyText) {
+    accessToken = null;
+    expiresAt = 0;
+    showSignedOut();
+    els.result.replaceChildren();
+    els.result.className = 'result';
+    const p = document.createElement('p');
+    p.className = 'muted';
+    p.textContent = message;
+    els.result.appendChild(p);
+    const item = document.createElement('li');
+    item.textContent = historyText;
+    els.history.prepend(item);
+  }
+
   function tick() {
     const left = Math.max(0, Math.round((expiresAt - Date.now()) / 1000));
+    if (left === 0 && accessToken) {
+      dropToken('Session expired after 15 minutes: the token is gone. Log in again.',
+        'Session expired → token dropped');
+      return;
+    }
     const minutes = Math.floor(left / 60);
     const seconds = String(left % 60).padStart(2, '0');
     els.meExpiry.textContent = left > 0
@@ -192,18 +215,8 @@
   });
 
   els.logout.addEventListener('click', () => {
-    accessToken = null;
-    expiresAt = 0;
-    showSignedOut();
-    els.result.replaceChildren();
-    els.result.className = 'result';
-    const p = document.createElement('p');
-    p.className = 'muted';
-    p.textContent = 'Logged out: the token is gone from this tab. Try "Read lesson" now; the answer is 401.';
-    els.result.appendChild(p);
-    const item = document.createElement('li');
-    item.textContent = 'Log out → token dropped';
-    els.history.prepend(item);
+    dropToken('Logged out: the token is gone from this tab. Try "Read lesson" now; the answer is 401.',
+      'Log out → token dropped');
   });
 
   for (const button of document.querySelectorAll('[data-user]')) {
