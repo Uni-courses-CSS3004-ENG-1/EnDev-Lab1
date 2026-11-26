@@ -1,0 +1,189 @@
+### Tutoring marketplace — Lab 4 + 5 lesson requests (IntelliJ HTTP Client)
+#
+# 1. docker compose up -d
+# 2. mvn spring-boot:run          (dev profile, port 8080)
+# 3. Run auth.http first, then run this file with "Run All Requests in File".
+#    auth.http stores studentToken and tutorToken as global variables; this file uses studentToken.
+
+@host = http://localhost:8080
+
+
+### 1. Create a lesson with no token -> 401 UNAUTHENTICATED
+POST {{host}}/api/v1/lessons
+Content-Type: application/json
+X-Correlation-Id: http-lesson-no-token
+
+{
+  "businessKey": "LES-HTTP-NO-TOKEN",
+  "subject": "Algebra"
+}
+
+> {%
+    client.test("401", () => client.assert(response.status === 401, "status " + response.status));
+    client.test("code UNAUTHENTICATED", () => client.assert(response.body.code === "UNAUTHENTICATED"));
+    client.test("valid token required", () =>
+        client.assert(response.body.message === "valid token required", response.body.message));
+    client.test("correlation id echoed", () =>
+        client.assert(response.body.correlationId === "http-lesson-no-token", response.body.correlationId));
+%}
+
+
+### 2. Create a lesson -> 201, Location and requested status
+POST {{host}}/api/v1/lessons
+Authorization: Bearer {{studentToken}}
+Content-Type: application/json
+X-Correlation-Id: http-lesson-create
+
+{
+  "businessKey": "LES-HTTP-001",
+  "subject": "Algebra"
+}
+
+> {%
+    client.global.set("lessonId", response.body.id);
+    client.test("201 Created", () => client.assert(response.status === 201, "status " + response.status));
+    client.test("Location ends with the lesson UUID", () =>
+        client.assert(response.headers.valueOf("Location").endsWith(response.body.id)));
+    client.test("response is requested Algebra", () =>
+        client.assert(response.body.businessKey === "LES-HTTP-001" &&
+            response.body.subject === "Algebra" && response.body.status === "REQUESTED"));
+%}
+
+
+### 3. Read the created lesson -> 200
+GET {{host}}/api/v1/lessons/{{lessonId}}
+Authorization: Bearer {{studentToken}}
+
+> {%
+    client.test("200 OK", () => client.assert(response.status === 200, "status " + response.status));
+    client.test("same lesson", () =>
+        client.assert(response.body.id === client.global.get("lessonId") && response.body.businessKey === "LES-HTTP-001"));
+%}
+
+
+### 4. Blank business key -> 400 VALIDATION
+POST {{host}}/api/v1/lessons
+Authorization: Bearer {{studentToken}}
+Content-Type: application/json
+
+{
+  "businessKey": "",
+  "subject": "Algebra"
+}
+
+> {%
+    client.test("400", () => client.assert(response.status === 400, "status " + response.status));
+    client.test("code VALIDATION", () => client.assert(response.body.code === "VALIDATION"));
+    client.test("business key is named", () =>
+        client.assert(response.body.message === "businessKey must not be blank", response.body.message));
+%}
+
+
+### 5. Unknown lesson UUID -> 404 NOT_FOUND
+GET {{host}}/api/v1/lessons/00000000-0000-0000-0000-000000000001
+Authorization: Bearer {{studentToken}}
+
+> {%
+    client.test("404", () => client.assert(response.status === 404, "status " + response.status));
+    client.test("code NOT_FOUND", () => client.assert(response.body.code === "NOT_FOUND"));
+    client.test("lesson not found", () =>
+        client.assert(response.body.message === "lesson not found: 00000000-0000-0000-0000-000000000001", response.body.message));
+%}
+
+
+### 6. PUT is not supported -> 405 METHOD_NOT_ALLOWED
+PUT {{host}}/api/v1/lessons/{{lessonId}}
+Authorization: Bearer {{studentToken}}
+Content-Type: application/json
+
+{}
+
+> {%
+    client.test("405", () => client.assert(response.status === 405, "status " + response.status));
+    client.test("code METHOD_NOT_ALLOWED", () => client.assert(response.body.code === "METHOD_NOT_ALLOWED"));
+    client.test("method not allowed", () =>
+        client.assert(response.body.message === "method not allowed", response.body.message));
+%}
+
+
+### 7. Repeat the business key -> 409 DUPLICATE
+POST {{host}}/api/v1/lessons
+Authorization: Bearer {{studentToken}}
+Content-Type: application/json
+
+{
+  "businessKey": "LES-HTTP-001",
+  "subject": "Algebra"
+}
+
+> {%
+    client.test("409", () => client.assert(response.status === 409, "status " + response.status));
+    client.test("code DUPLICATE", () => client.assert(response.body.code === "DUPLICATE"));
+    client.test("duplicate business key", () =>
+        client.assert(response.body.message === "duplicate lesson: LES-HTTP-001", response.body.message));
+%}
+
+
+### 8. Plain text is unsupported -> 415 UNSUPPORTED
+POST {{host}}/api/v1/lessons
+Authorization: Bearer {{studentToken}}
+Content-Type: text/plain
+
+Algebra
+
+> {%
+    client.test("415", () => client.assert(response.status === 415, "status " + response.status));
+    client.test("code UNSUPPORTED", () => client.assert(response.body.code === "UNSUPPORTED"));
+    client.test("application json required", () =>
+        client.assert(response.body.message === "content type must be application/json", response.body.message));
+%}
+
+
+### 9. Health stays open -> 200 UP
+GET {{host}}/actuator/health
+
+> {%
+    client.test("200 OK", () => client.assert(response.status === 200, "status " + response.status));
+    client.test("UP", () => client.assert(response.body.status === "UP", response.body.status));
+%}
+
+
+### 10. Info stays open -> 200 with the product name
+GET {{host}}/actuator/info
+
+> {%
+    client.test("200 OK", () => client.assert(response.status === 200, "status " + response.status));
+    client.test("product name", () =>
+        client.assert(response.body.app.name === "Tutoring marketplace", response.body.app.name));
+%}
+
+
+### 11. OpenAPI stays open -> 200
+GET {{host}}/v3/api-docs
+
+> {%
+    client.test("200 OK", () => client.assert(response.status === 200, "status " + response.status));
+    client.test("lesson API is documented", () => client.assert(response.body.paths["/api/v1/lessons"] !== undefined));
+%}
+
+
+### 12. Env is denied without a token -> 401 UNAUTHENTICATED
+GET {{host}}/actuator/env
+
+> {%
+    client.test("401", () => client.assert(response.status === 401, "status " + response.status));
+    client.test("code UNAUTHENTICATED", () => client.assert(response.body.code === "UNAUTHENTICATED"));
+    client.test("valid token required", () =>
+        client.assert(response.body.message === "valid token required", response.body.message));
+%}
+
+
+### 13. Heapdump is denied without a token -> 401 UNAUTHENTICATED
+GET {{host}}/actuator/heapdump
+
+> {%
+    client.test("401", () => client.assert(response.status === 401, "status " + response.status));
+    client.test("code UNAUTHENTICATED", () => client.assert(response.body.code === "UNAUTHENTICATED"));
+    client.test("valid token required", () =>
+        client.assert(response.body.message === "valid token required", response.body.message));
+%}
