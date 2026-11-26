@@ -1,0 +1,1577 @@
+{
+  "info": {
+    "name": "Tutoring marketplace — Lab 4 + 5 API",
+    "description": "CSS-3008 Labs 4 and 5: lessons, the error record, actuator, OpenAPI, and the Lab 5 security rules.\n\nStart the app with `docker compose up -d` and `mvn spring-boot:run` (dev profile), then run the whole collection in order (Runner). Folder 0 logs in as the dev-only users aliya / student-dev (STUDENT) and dana / tutor-dev (TUTOR) and stores studentToken and tutorToken as collection variables. Every request sends `Authorization: Bearer {{studentToken}}` unless it says otherwise: the open endpoints use No Auth, and the confirm requests use tutorToken. No request prints a token.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "businessKey",
+      "value": ""
+    },
+    {
+      "key": "lessonId",
+      "value": ""
+    },
+    {
+      "key": "maxKey",
+      "value": ""
+    },
+    {
+      "key": "studentToken",
+      "value": ""
+    },
+    {
+      "key": "tutorToken",
+      "value": ""
+    },
+    {
+      "key": "confirmLessonId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "0. Auth — log in and who am I",
+      "description": "Run first. Stores studentToken and tutorToken for every later request.",
+      "item": [
+        {
+          "name": "Log in as the student (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set(\"studentToken\", body.accessToken);",
+                  "pm.test(\"tokenType Bearer\", () => pm.expect(body.tokenType).to.eql(\"Bearer\"));",
+                  "pm.test(\"expiresIn 900 (15 minutes)\", () => pm.expect(body.expiresIn).to.eql(900));",
+                  "pm.test(\"only accessToken, tokenType, expiresIn\", () =>",
+                  "    pm.expect(Object.keys(body).sort()).to.eql([\"accessToken\", \"expiresIn\", \"tokenType\"]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Dev-only user aliya (STUDENT).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"aliya\",\n  \"password\": \"student-dev\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Log in as the tutor (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set(\"tutorToken\", pm.response.json().accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Dev-only user dana (TUTOR).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"dana\",\n  \"password\": \"tutor-dev\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Wrong password (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"401 Unauthorized\", () => pm.response.to.have.status(401));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"code UNAUTHENTICATED\", () => pm.expect(body.code).to.eql(\"UNAUTHENTICATED\"));",
+                  "pm.test(\"bad username or password\", () => pm.expect(body.message).to.eql(\"bad username or password\"));",
+                  "pm.test(\"code, message, correlationId only\", () =>",
+                  "    pm.expect(Object.keys(body).sort()).to.eql([\"code\", \"correlationId\", \"message\"]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"aliya\",\n  \"password\": \"not-her-password\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Unknown user, same message (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"401 Unauthorized\", () => pm.response.to.have.status(401));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"code UNAUTHENTICATED\", () => pm.expect(body.code).to.eql(\"UNAUTHENTICATED\"));",
+                  "pm.test(\"bad username or password\", () => pm.expect(body.message).to.eql(\"bad username or password\"));",
+                  "pm.test(\"code, message, correlationId only\", () =>",
+                  "    pm.expect(Object.keys(body).sort()).to.eql([\"code\", \"correlationId\", \"message\"]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"nobody\",\n  \"password\": \"student-dev\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Blank password (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"400 Bad Request\", () => pm.response.to.have.status(400));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"code VALIDATION\", () => pm.expect(body.code).to.eql(\"VALIDATION\"));",
+                  "pm.test(\"password must not be blank\", () => pm.expect(body.message).to.eql(\"password must not be blank\"));",
+                  "pm.test(\"code, message, correlationId only\", () =>",
+                  "    pm.expect(Object.keys(body).sort()).to.eql([\"code\", \"correlationId\", \"message\"]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"aliya\",\n  \"password\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Who am I, student (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"aliya from the token\", () => pm.expect(body.username).to.eql(\"aliya\"));",
+                  "pm.test(\"ROLE_STUDENT\", () => pm.expect(body.authorities).to.eql([\"ROLE_STUDENT\"]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "me"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Who am I, tutor (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"dana from the token\", () => pm.expect(body.username).to.eql(\"dana\"));",
+                  "pm.test(\"ROLE_TUTOR\", () => pm.expect(body.authorities).to.eql([\"ROLE_TUTOR\"]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "me"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tutorToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Who am I, no token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"401 Unauthorized\", () => pm.response.to.have.status(401));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"code UNAUTHENTICATED\", () => pm.expect(body.code).to.eql(\"UNAUTHENTICATED\"));",
+                  "pm.test(\"valid token required\", () => pm.expect(body.message).to.eql(\"valid token required\"));",
+                  "pm.test(\"code, message, correlationId only\", () =>",
+                  "    pm.expect(Object.keys(body).sort()).to.eql([\"code\", \"correlationId\", \"message\"]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "me"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. Lessons — happy path",
+      "item": [
+        {
+          "name": "Create a lesson with no token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"401 Unauthorized\", () => pm.response.to.have.status(401));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"code UNAUTHENTICATED\", () => pm.expect(body.code).to.eql(\"UNAUTHENTICATED\"));",
+                  "pm.test(\"valid token required\", () => pm.expect(body.message).to.eql(\"valid token required\"));",
+                  "pm.test(\"code, message, correlationId only\", () =>",
+                  "    pm.expect(Object.keys(body).sort()).to.eql([\"code\", \"correlationId\", \"message\"]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lessons",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lessons"
+              ]
+            },
+            "description": "Lab 5: anonymous create is 401, not 201.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"businessKey\": \"LES-NO-TOKEN\",\n  \"subject\": \"Algebra\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Create a lesson (201)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"businessKey\", \"LES-\" + Date.now());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"201 Created\", () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set(\"lessonId\", body.id);",
+                  "pm.test(\"Location ends with the new UUID\", () =>",
+                  "    pm.expect(pm.response.headers.get(\"Location\")).to.match(new RegExp(\"/api/v1/lessons/\" + body.id + \"$\")));",
+                  "pm.test(\"first status is REQUESTED\", () => pm.expect(body.status).to.eql(\"REQUESTED\"));",
+                  "pm.test(\"id, businessKey, status, subject, tutorId, studentId\", () =>",
+                  "    pm.expect(Object.keys(body).sort()).to.eql([\"businessKey\", \"id\", \"status\", \"studentId\", \"subject\", \"tutorId\"]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lessons",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lessons"
+              ]
+            },
+            "description": "Creates one lesson with a fresh business key and stores its UUID in lessonId.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"businessKey\": \"{{businessKey}}\",\n  \"subject\": \"Algebra\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Get the lesson by UUID (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"same lesson\", () => pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get(\"lessonId\")));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lessons/{{lessonId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lessons",
+                "{{lessonId}}"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Subject of exactly 120 characters (201)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"maxKey\", \"LES-\" + Date.now() + \"-120\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"201 Created\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"full subject kept\", () => pm.expect(pm.response.json().subject).to.have.lengthOf(120));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lessons",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lessons"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"businessKey\": \"{{maxKey}}\",\n  \"subject\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Lessons — errors",
+      "item": [
+        {
+          "name": "Same business key again (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"409 Conflict\", () => pm.response.to.have.status(409));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"code DUPLICATE\", () => pm.expect(body.code).to.eql(\"DUPLICATE\"));",
+                  "pm.test(\"error body is code, message, correlationId\", () =>",
+                  "    pm.expect(Object.keys(body).sort()).to.eql([\"code\", \"correlationId\", \"message\"]));",
+                  "pm.test(\"correlation id echoed\", () => pm.expect(body.correlationId).to.eql(\"postman-dup-1\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "postman-dup-1"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lessons",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lessons"
+              ]
+            },
+            "description": "Run 'Create a lesson' first. The first row stays; the count for the key is still 1.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"businessKey\": \"{{businessKey}}\",\n  \"subject\": \"Algebra\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Subject of 121 characters (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"400 Bad Request\", () => pm.response.to.have.status(400));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"code VALIDATION\", () => pm.expect(body.code).to.eql(\"VALIDATION\"));",
+                  "pm.test(\"error body is code, message, correlationId\", () =>",
+                  "    pm.expect(Object.keys(body).sort()).to.eql([\"code\", \"correlationId\", \"message\"]));",
+                  "pm.test(\"message: subject size must be between 0 and 120\", () => pm.expect(body.message).to.eql(\"subject size must be between 0 and 120\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lessons",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lessons"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"businessKey\": \"LES-too-long\",\n  \"subject\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Blank subject (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"400 Bad Request\", () => pm.response.to.have.status(400));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"code VALIDATION\", () => pm.expect(body.code).to.eql(\"VALIDATION\"));",
+                  "pm.test(\"error body is code, message, correlationId\", () =>",
+                  "    pm.expect(Object.keys(body).sort()).to.eql([\"code\", \"correlationId\", \"message\"]));",
+                  "pm.test(\"message: subject must not be blank\", () => pm.expect(body.message).to.eql(\"subject must not be blank\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lessons",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lessons"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"businessKey\": \"LES-blank-subject\",\n  \"subject\": \"   \"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Blank business key (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"400 Bad Request\", () => pm.response.to.have.status(400));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"code VALIDATION\", () => pm.expect(body.code).to.eql(\"VALIDATION\"));",
+                  "pm.test(\"error body is code, message, correlationId\", () =>",
+                  "    pm.expect(Object.keys(body).sort()).to.eql([\"code\", \"correlationId\", \"message\"]));",
+                  "pm.test(\"message: businessKey must not be blank\", () => pm.expect(body.message).to.eql(\"businessKey must not be blank\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lessons",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lessons"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"businessKey\": \"\",\n  \"subject\": \"Algebra\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Body is not JSON (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"400 Bad Request\", () => pm.response.to.have.status(400));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"code VALIDATION\", () => pm.expect(body.code).to.eql(\"VALIDATION\"));",
+                  "pm.test(\"error body is code, message, correlationId\", () =>",
+                  "    pm.expect(Object.keys(body).sort()).to.eql([\"code\", \"correlationId\", \"message\"]));",
+                  "pm.test(\"message: body must be JSON\", () => pm.expect(body.message).to.eql(\"body must be JSON\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lessons",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lessons"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "this is not json",
+              "options": {
+                "raw": {
+                  "language": "text"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Wrong Content-Type (415)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"415 Unsupported Media Type\", () => pm.response.to.have.status(415));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"code UNSUPPORTED\", () => pm.expect(body.code).to.eql(\"UNSUPPORTED\"));",
+                  "pm.test(\"error body is code, message, correlationId\", () =>",
+                  "    pm.expect(Object.keys(body).sort()).to.eql([\"code\", \"correlationId\", \"message\"]));",
+                  "pm.test(\"message: content type must be application/json\", () => pm.expect(body.message).to.eql(\"content type must be application/json\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/plain"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lessons",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lessons"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "Algebra",
+              "options": {
+                "raw": {
+                  "language": "text"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Business key in the path (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"400 Bad Request\", () => pm.response.to.have.status(400));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"code VALIDATION\", () => pm.expect(body.code).to.eql(\"VALIDATION\"));",
+                  "pm.test(\"error body is code, message, correlationId\", () =>",
+                  "    pm.expect(Object.keys(body).sort()).to.eql([\"code\", \"correlationId\", \"message\"]));",
+                  "pm.test(\"message: id must be a UUID\", () => pm.expect(body.message).to.eql(\"id must be a UUID\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lessons/{{businessKey}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lessons",
+                "{{businessKey}}"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Unknown UUID (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"404 Not Found\", () => pm.response.to.have.status(404));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"code NOT_FOUND\", () => pm.expect(body.code).to.eql(\"NOT_FOUND\"));",
+                  "pm.test(\"error body is code, message, correlationId\", () =>",
+                  "    pm.expect(Object.keys(body).sort()).to.eql([\"code\", \"correlationId\", \"message\"]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lessons/7d3f0a52-1c2b-4c55-9a51-2f9d0c1e4b6a",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lessons",
+                "7d3f0a52-1c2b-4c55-9a51-2f9d0c1e4b6a"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Missing correlation id gets a new one (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"400 Bad Request\", () => pm.response.to.have.status(400));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"code VALIDATION\", () => pm.expect(body.code).to.eql(\"VALIDATION\"));",
+                  "pm.test(\"error body is code, message, correlationId\", () =>",
+                  "    pm.expect(Object.keys(body).sort()).to.eql([\"code\", \"correlationId\", \"message\"]));",
+                  "pm.test(\"a UUID was minted\", () => pm.expect(body.correlationId).to.match(/^[0-9a-f-]{36}$/));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lessons",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lessons"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"businessKey\": \"\",\n  \"subject\": \"Algebra\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "DELETE is not in v1 (405)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"405 Method Not Allowed\", () => pm.response.to.have.status(405));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"code METHOD_NOT_ALLOWED\", () => pm.expect(body.code).to.eql(\"METHOD_NOT_ALLOWED\"));",
+                  "pm.test(\"error body is code, message, correlationId\", () =>",
+                  "    pm.expect(Object.keys(body).sort()).to.eql([\"code\", \"correlationId\", \"message\"]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lessons/{{lessonId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lessons",
+                "{{lessonId}}"
+              ]
+            },
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Platform — actuator and OpenAPI",
+      "item": [
+        {
+          "name": "Health (200 UP)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"status UP\", () => pm.expect(body.status).to.eql(\"UP\"));",
+                  "pm.test(\"no details\", () => pm.expect(body).to.not.have.any.keys(\"components\", \"details\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Info (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"product name\", () => pm.expect(pm.response.json().app.name).to.eql(\"Tutoring marketplace\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/info",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "info"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "env without a token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"401 Unauthorized\", () => pm.response.to.have.status(401));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"code UNAUTHENTICATED\", () => pm.expect(body.code).to.eql(\"UNAUTHENTICATED\"));",
+                  "pm.test(\"valid token required\", () => pm.expect(body.message).to.eql(\"valid token required\"));",
+                  "pm.test(\"code, message, correlationId only\", () =>",
+                  "    pm.expect(Object.keys(body).sort()).to.eql([\"code\", \"correlationId\", \"message\"]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/env",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "env"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "heapdump without a token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"401 Unauthorized\", () => pm.response.to.have.status(401));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"code UNAUTHENTICATED\", () => pm.expect(body.code).to.eql(\"UNAUTHENTICATED\"));",
+                  "pm.test(\"valid token required\", () => pm.expect(body.message).to.eql(\"valid token required\"));",
+                  "pm.test(\"code, message, correlationId only\", () =>",
+                  "    pm.expect(Object.keys(body).sort()).to.eql([\"code\", \"correlationId\", \"message\"]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/heapdump",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "heapdump"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "OpenAPI contract (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "const paths = pm.response.json().paths;",
+                  "pm.test(\"create documents 201, 400, 409\", () =>",
+                  "    pm.expect(Object.keys(paths[\"/api/v1/lessons\"].post.responses)).to.include.members([\"201\", \"400\", \"409\"]));",
+                  "pm.test(\"get documents 200, 404\", () =>",
+                  "    pm.expect(Object.keys(paths[\"/api/v1/lessons/{id}\"].get.responses)).to.include.members([\"200\", \"404\"]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v3/api-docs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v3",
+                "api-docs"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "env with a token is still denied (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"403 Forbidden\", () => pm.response.to.have.status(403));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"code FORBIDDEN\", () => pm.expect(body.code).to.eql(\"FORBIDDEN\"));",
+                  "pm.test(\"not allowed for your role\", () => pm.expect(body.message).to.eql(\"not allowed for your role\"));",
+                  "pm.test(\"code, message, correlationId only\", () =>",
+                  "    pm.expect(Object.keys(body).sort()).to.eql([\"code\", \"correlationId\", \"message\"]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/env",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "env"
+              ]
+            },
+            "description": "Outside the rules table: anyRequest().denyAll().",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tutorToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Confirm a lesson — TUTOR only",
+      "description": "The marker's path: a student's confirm is 403 and the row stays REQUESTED; the tutor's is 200.",
+      "item": [
+        {
+          "name": "Student creates a lesson to confirm (201)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"201 Created\", () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set(\"confirmLessonId\", pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lessons",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lessons"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"businessKey\": \"LES-CONFIRM-{{$timestamp}}\",\n  \"subject\": \"Algebra\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Student confirms (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"403 Forbidden\", () => pm.response.to.have.status(403));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"code FORBIDDEN\", () => pm.expect(body.code).to.eql(\"FORBIDDEN\"));",
+                  "pm.test(\"not allowed for your role\", () => pm.expect(body.message).to.eql(\"not allowed for your role\"));",
+                  "pm.test(\"code, message, correlationId only\", () =>",
+                  "    pm.expect(Object.keys(body).sort()).to.eql([\"code\", \"correlationId\", \"message\"]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lessons/{{confirmLessonId}}/confirm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lessons",
+                "{{confirmLessonId}}",
+                "confirm"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "The row did not move (200 REQUESTED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"still REQUESTED\", () => pm.expect(pm.response.json().status).to.eql(\"REQUESTED\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lessons/{{confirmLessonId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lessons",
+                "{{confirmLessonId}}"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Tutor confirms (200 CONFIRMED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"now CONFIRMED\", () => pm.expect(pm.response.json().status).to.eql(\"CONFIRMED\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lessons/{{confirmLessonId}}/confirm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lessons",
+                "{{confirmLessonId}}",
+                "confirm"
+              ]
+            },
+            "description": "The JSON body claims to be aliya the student; the actor comes from the token.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"actor\": \"aliya\",\n  \"role\": \"STUDENT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tutorToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Tutor confirms twice (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"409 Conflict\", () => pm.response.to.have.status(409));",
+                  "pm.test(\"code INVALID_TRANSITION\", () => pm.expect(pm.response.json().code).to.eql(\"INVALID_TRANSITION\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lessons/{{confirmLessonId}}/confirm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lessons",
+                "{{confirmLessonId}}",
+                "confirm"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tutorToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Confirm with no token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"401 Unauthorized\", () => pm.response.to.have.status(401));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"code UNAUTHENTICATED\", () => pm.expect(body.code).to.eql(\"UNAUTHENTICATED\"));",
+                  "pm.test(\"valid token required\", () => pm.expect(body.message).to.eql(\"valid token required\"));",
+                  "pm.test(\"code, message, correlationId only\", () =>",
+                  "    pm.expect(Object.keys(body).sort()).to.eql([\"code\", \"correlationId\", \"message\"]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lessons/{{confirmLessonId}}/confirm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lessons",
+                "{{confirmLessonId}}",
+                "confirm"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{studentToken}}",
+        "type": "string"
+      }
+    ]
+  }
+}
