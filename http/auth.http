@@ -1,0 +1,138 @@
+### Tutoring marketplace — Lab 5 login and "who am I" (IntelliJ HTTP Client)
+#
+# 1. docker compose up -d
+# 2. mvn spring-boot:run          (dev profile, port 8080)
+# 3. Run this file first with "Run All Requests in File".
+#    Requests 1 and 2 store studentToken and tutorToken; lessons.http and errors.http reuse them.
+#
+# Dev-only users from DevUsersConfig (laptop profile, never in prod):
+#   aliya / student-dev  -> STUDENT
+#   dana  / tutor-dev    -> TUTOR
+#
+# The tokens live only in the HTTP Client's global variables. No request prints them.
+
+@host = http://localhost:8080
+
+
+### 1. Log in as the student -> 200, Bearer, 900 seconds
+POST {{host}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "aliya",
+  "password": "student-dev"
+}
+
+> {%
+    client.global.set("studentToken", response.body.accessToken);
+    client.test("200 OK", () => client.assert(response.status === 200, "status " + response.status));
+    client.test("tokenType Bearer", () => client.assert(response.body.tokenType === "Bearer"));
+    client.test("expiresIn 900 (15 minutes)", () => client.assert(response.body.expiresIn === 900));
+    client.test("token has three parts", () => client.assert(response.body.accessToken.split(".").length === 3));
+    client.test("no password in the response", () => client.assert(response.body.password === undefined));
+%}
+
+
+### 2. Log in as the tutor -> 200
+POST {{host}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "dana",
+  "password": "tutor-dev"
+}
+
+> {%
+    client.global.set("tutorToken", response.body.accessToken);
+    client.test("200 OK", () => client.assert(response.status === 200, "status " + response.status));
+    client.test("tokenType Bearer", () => client.assert(response.body.tokenType === "Bearer"));
+%}
+
+
+### 3. Who am I, as the student -> 200, aliya, ROLE_STUDENT
+GET {{host}}/api/me
+Authorization: Bearer {{studentToken}}
+
+> {%
+    client.test("200 OK", () => client.assert(response.status === 200, "status " + response.status));
+    client.test("username from the token", () => client.assert(response.body.username === "aliya"));
+    client.test("ROLE_STUDENT only", () =>
+        client.assert(response.body.authorities.join() === "ROLE_STUDENT", response.body.authorities.join()));
+%}
+
+
+### 4. Who am I, as the tutor -> 200, dana, ROLE_TUTOR
+GET {{host}}/api/me
+Authorization: Bearer {{tutorToken}}
+
+> {%
+    client.test("200 OK", () => client.assert(response.status === 200, "status " + response.status));
+    client.test("username from the token", () => client.assert(response.body.username === "dana"));
+    client.test("ROLE_TUTOR only", () =>
+        client.assert(response.body.authorities.join() === "ROLE_TUTOR", response.body.authorities.join()));
+%}
+
+
+### 5. Who am I, no token -> 401 UNAUTHENTICATED
+GET {{host}}/api/me
+
+> {%
+    client.test("401", () => client.assert(response.status === 401, "status " + response.status));
+    client.test("code UNAUTHENTICATED", () => client.assert(response.body.code === "UNAUTHENTICATED"));
+    client.test("valid token required", () => client.assert(response.body.message === "valid token required"));
+%}
+
+
+### 6. Known user, wrong password -> 401 bad username or password
+POST {{host}}/api/v1/auth/login
+Content-Type: application/json
+X-Correlation-Id: http-login-wrong-password
+
+{
+  "username": "aliya",
+  "password": "not-her-password"
+}
+
+> {%
+    client.global.set("wrongPasswordMessage", response.body.message);
+    client.test("401", () => client.assert(response.status === 401, "status " + response.status));
+    client.test("code UNAUTHENTICATED", () => client.assert(response.body.code === "UNAUTHENTICATED"));
+    client.test("bad username or password", () =>
+        client.assert(response.body.message === "bad username or password", response.body.message));
+    client.test("correlation id echoed", () =>
+        client.assert(response.body.correlationId === "http-login-wrong-password"));
+    client.test("no token issued", () => client.assert(response.body.accessToken === undefined));
+%}
+
+
+### 7. Unknown user -> the same 401 message as a wrong password
+POST {{host}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "nobody",
+  "password": "student-dev"
+}
+
+> {%
+    client.test("401", () => client.assert(response.status === 401, "status " + response.status));
+    client.test("same message as a wrong password", () =>
+        client.assert(response.body.message === client.global.get("wrongPasswordMessage"), response.body.message));
+%}
+
+
+### 8. Blank password -> 400 VALIDATION, names the field
+POST {{host}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "aliya",
+  "password": ""
+}
+
+> {%
+    client.test("400", () => client.assert(response.status === 400, "status " + response.status));
+    client.test("code VALIDATION", () => client.assert(response.body.code === "VALIDATION"));
+    client.test("password must not be blank", () =>
+        client.assert(response.body.message === "password must not be blank", response.body.message));
+%}
