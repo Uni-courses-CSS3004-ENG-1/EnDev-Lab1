@@ -77,8 +77,9 @@
   function show(action, res, extra) {
     const box = els.result;
     box.replaceChildren();
-    box.className = 'result ' + (res.status >= 200 && res.status < 300 ? 'ok'
-      : res.status === 409 || res.status === 404 ? 'warn' : 'bad');
+    const tone = res.status >= 200 && res.status < 300 ? 'ok'
+      : res.status === 409 || res.status === 404 ? 'warn' : 'bad';
+    box.className = 'result ' + tone;
 
     const headline = document.createElement('p');
     headline.className = 'headline';
@@ -122,7 +123,7 @@
 
     const item = document.createElement('li');
     const code = document.createElement('span');
-    code.className = 'code';
+    code.className = 'code ' + tone;
     code.textContent = (res.status || 'no answer') + (isError(res.data) ? ' ' + res.data.code : '');
     item.append(action + ' → ', code);
     els.history.prepend(item);
@@ -131,7 +132,10 @@
   function setLesson(lesson) {
     if (!lesson) return;
     if (lesson.id) els.lessonId.value = lesson.id;
-    if (lesson.status) els.lessonStatus.textContent = lesson.status;
+    if (lesson.status) {
+      els.lessonStatus.textContent = lesson.status;
+      els.lessonStatus.dataset.status = lesson.status;
+    }
   }
 
   function lessonId() {
