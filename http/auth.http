@@ -5,7 +5,7 @@
 # 3. Run this file first with "Run All Requests in File".
 #    Requests 1 and 2 store studentToken and tutorToken; lessons.http and errors.http reuse them.
 #
-# Dev-only users from DevUsersConfig (laptop profile, never in prod):
+# The app ships no users. Run setup.http once first: it signs these accounts up.
 #   aliya / student-dev  -> STUDENT
 #   dana  / tutor-dev    -> TUTOR
 #

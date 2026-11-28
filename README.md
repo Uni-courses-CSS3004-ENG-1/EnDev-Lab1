@@ -104,7 +104,15 @@ checksum, installation order, and success. An applied file is frozen because cha
 changes its checksum. The next change is always a new `V<n>` file. V1 was not edited to add
 `tutor`; that change is V2.
 
-After all three migrations have run, the history query is:
+Three more files followed for accounts and booking, each a new version and none an edit:
+
+| File | Change |
+|---|---|
+| `V4__create_app_user.sql` | The `app_user` table: unique username, BCrypt hash, role CHECK, link to a student or tutor row |
+| `V5__add_tutor_bio.sql` | `tutor.bio text NOT NULL DEFAULT ''`, so existing tutors stay valid |
+| `V6__add_lesson_starts_at.sql` | `lesson.starts_at timestamptz`, optional, so lessons made before booking stay valid |
+
+After all six migrations have run, the history query is:
 
 ```text
 SELECT installed_rank, version, description, success FROM flyway_schema_history ORDER BY installed_rank;
@@ -114,7 +122,10 @@ SELECT installed_rank, version, description, success FROM flyway_schema_history 
               1 | 1       | create lesson            | t
               2 | 2       | add tutor                | t
               3 | 3       | create tutor and student | t
-(3 rows)
+              4 | 4       | create app user          | t
+              5 | 5       | add tutor bio            | t
+              6 | 6       | add lesson starts at     | t
+(6 rows)
 ```
 
 There is no standalone schema source outside the migrations. One owner of the schema prevents a
@@ -170,6 +181,14 @@ The lesson rules stay plain Java; HTTP is an adapter. Another team gets a URL, a
 | `GET /api/v1/tutors/{id}` | Read that tutor by its UUID |
 | `POST /api/v1/students` | Create a student: name, email (unique) |
 | `GET /api/v1/students/{id}` | Read that student by its UUID |
+| `POST /api/v1/auth/register` | Sign up as a student or tutor; answers **201** with a token, like login |
+| `GET /api/v1/account` | My profile: name, email, role, and a tutor's subject, price and bio |
+| `GET /api/v1/tutors` | The public tutor catalogue, no token needed and no emails |
+| `POST /api/v1/lessons/book` | A student books a tutor for one hour (`tutorId`, `subject`, `startsAt`) |
+| `GET /api/v1/lessons/mine` | My lessons: a tutor's teaching or a student's bookings, with names and price |
+| `POST /api/v1/lessons/{id}/confirm` | Tutor: `REQUESTED` → `CONFIRMED`, payment hold placed (the locked action) |
+| `POST /api/v1/lessons/{id}/complete` | Tutor: `CONFIRMED` → `COMPLETED`, hold released |
+| `POST /api/v1/lessons/{id}/cancel` | The lesson's tutor or student: → `CANCELLED`, a held payment is refunded |
 
 A lesson may name an existing tutor and student with the optional `tutorId` and `studentId`
 fields. Old clients that send only `businessKey` and `subject` keep working on v1. An unknown
@@ -182,8 +201,8 @@ email is **409** `DUPLICATE`.
 ```
 
 The version sits in the path. The path id is the row's UUID from Lab 3; the business key stays in
-the body. There is no `PUT`, `PATCH`, `DELETE` or list endpoint in this lab, and a `GET` never
-registers, moves or flushes anything. The assignment's `title` is this product's `subject`.
+the body. There is no `PUT`, `PATCH` or `DELETE`; statuses move only through the three verbs above,
+and a `GET` never registers, moves or flushes anything. The assignment's `title` is this product's `subject`.
 
 Create request (both fields required, `subject` at most 120 characters):
 
@@ -287,23 +306,33 @@ delete; the row stays.
 
 ### Rules
 
-The filter chain follows this table from top to bottom. The first matching row wins.
+The filter chain follows this table from top to bottom. The first matching row wins. The numbers are
+the numbered comments in `SecurityConfig`.
 
-| Action | `STUDENT` | `TUTOR` | No token |
-|---|---|---|---|
-| `POST /api/v1/auth/login` | anyone | anyone | allowed |
-| The auth page: `GET /`, `/index.html`, `/app.css`, `/app.js` | anyone | anyone | allowed |
-| `GET /actuator/health`, `GET /actuator/info` | anyone | anyone | allowed |
-| springdoc: `/swagger-ui.html`, `/swagger-ui/**`, `/v3/api-docs/**` | anyone | anyone | allowed |
-| Confirm a lesson: `POST /api/v1/lessons/{id}/confirm` | **403** | yes | 401 |
-| `GET /api/me` | yes | yes | 401 |
-| Create and read lessons, tutors and students: `/api/v1/**` | yes | yes | 401 |
-| Anything else, including `/actuator/env` and `/actuator/heapdump` | 403 | 403 | 401 |
+| # | Action | `STUDENT` | `TUTOR` | No token |
+|---|---|---|---|---|
+| 1 | `POST /api/v1/auth/login`, `POST /api/v1/auth/register` | anyone | anyone | allowed |
+| 2 | The page: `GET /`, `/index.html`, `/app.css`, `/app.js` | anyone | anyone | allowed |
+| 3 | `GET /actuator/health`, `GET /actuator/info` | anyone | anyone | allowed |
+| 4 | springdoc: `/swagger-ui.html`, `/swagger-ui/**`, `/v3/api-docs/**` | anyone | anyone | allowed |
+| 5 | The public catalogue: `GET /api/v1/tutors` (this exact path only) | anyone | anyone | allowed |
+| 6 | Confirm or complete a lesson: `POST /api/v1/lessons/{id}/confirm`, `/complete` | **403** | yes | 401 |
+| 7 | Book a tutor: `POST /api/v1/lessons/book` | yes | **403** | 401 |
+| 8 | `GET /api/me` | yes | yes | 401 |
+| 9 | Everything else in `/api/v1/**`: create and read lessons, tutors and students, `mine`, `cancel`, `account` | yes | yes | 401 |
+| 10 | Anything else, including `/actuator/env` and `/actuator/heapdump` | 403 | 403 | 401 |
 
-`SecurityConfig` is this table in code. The confirm rule sits above `/api/v1/**`: with the wide rule
-first, a student would match it and get 200. `anyRequest().denyAll()` closes every path a teammate
+`SecurityConfig` is this table in code. Rows 6 and 7 sit above row 9: with the wide rule first, a
+student would match it and confirm. Row 5 names one exact path, so `/api/v1/tutors/{id}` still needs a
+token, and the list it opens carries no email. `anyRequest().denyAll()` closes every path a teammate
 adds later and forgets to list. CSRF is off and sessions are `STATELESS` because the credential is a
 header, never a cookie; there is no form login, no HTTP Basic and no server-side logout.
+
+**Whose lesson is it?** The role is checked first, by the URL rule and again by `@PreAuthorize`.
+`LessonWorkflowService` then checks ownership: a lesson booked with a tutor may only be confirmed,
+completed or cancelled by **that** tutor, and cancelled by its own student. Another tutor gets
+**403** `FORBIDDEN`, `not your lesson`, and the row does not change. A lesson with no tutor yet (made by
+`POST /api/v1/lessons`, as in Lab 5) is decided by the role alone.
 
 ### Login and the token
 
@@ -332,19 +361,48 @@ HS256 token that lives 15 minutes (`expiresIn` is seconds). The decoded payload 
 `hasRole("TUTOR")` finds `ROLE_TUTOR`. Anyone can read the payload, so it holds no email, phone or
 password. Changing `STUDENT` to `TUTOR` breaks the signature and the call is 401.
 
+### Accounts and sign-up
+
+Accounts live in the `app_user` table (`V4__create_app_user.sql`): username (unique), a BCrypt
+`password_hash`, the role (`STUDENT` or `TUTOR`, a CHECK constraint), and a link to the person's
+`student` or `tutor` row. A second CHECK makes a student account point at a student row and a tutor
+account at a tutor row.
+
+Login asks `AccountUsers` (a `UserDetailsService`) for the row by name; Spring compares the typed
+password with the hash. An unknown name and a wrong password are the same 401.
+
+`POST /api/v1/auth/register` is one transaction in `AccountService.register`: it writes the student or
+tutor row, then the account row with `passwordEncoder.encode(password)`. A taken username or email is
+**409** `DUPLICATE` and neither row stays. A tutor without a subject or price is **400**. The role in
+the sign-up body picks the kind of account once; every later call takes the role from the signed
+token, never from JSON. After sign-up the controller logs in with the same name and password, so a
+new account gets exactly the token a returning one gets.
+
+```json
+{ "username": "madina", "password": "correct-horse", "role": "TUTOR", "name": "Madina Sultan",
+  "email": "madina@example.com", "subject": "Biology", "hourlyRate": 20.00, "bio": "Cells and genes." }
+```
+
+| Sign-up | Status | Body |
+|---|---|---|
+| New name and email | 201 | the token, `Location: /api/v1/account` |
+| Username taken (also `aliya` and `dana`) | 409 | `DUPLICATE`, `username already taken: madina` |
+| Email taken | 409 | `DUPLICATE`, `email already exists: madina@example.com` |
+| Password under 8 or over 72 characters | 400 | `VALIDATION`, `password size must be between 8 and 72` |
+| Role not `STUDENT` or `TUTOR` | 400 | `VALIDATION`, `role must be STUDENT or TUTOR` |
+| Tutor without a subject | 400 | `VALIDATION`, `subject is required for a tutor` |
+
 ### Dev users
 
-`DevUsersConfig` is `@Profile("dev")`: the users exist only on the laptop, in an
-`InMemoryUserDetailsManager`. There is no user table and no Flyway script for accounts. Prod ships
-no users.
+`DevUsersConfig` is `@Profile("dev")`. At start-up it registers each missing classroom account
+through `AccountService`, the same path as the sign-up form, so the passwords are BCrypt hashes in
+the table and never text. Prod registers nobody.
 
 | Username | Password | Role |
 |---|---|---|
 | `aliya` | `student-dev` | `STUDENT` |
-| `dana` | `tutor-dev` | `TUTOR` |
-
-The passwords are encoded by the delegating `PasswordEncoder` at start-up, so the manager holds
-`{bcrypt}$2a$10$...` hashes and never the text.
+| `dana` | `tutor-dev` | `TUTOR` (Algebra, $25) |
+| `timur`, `mira`, `arman`, `sofia`, `erik`, `aigerim` | `tutor-dev` | `TUTOR`, so the catalogue is not empty |
 
 ### The secret
 
@@ -399,28 +457,45 @@ the same role as the URL rule, a second lock on the same door. The rules in `rul
 { "username": "aliya", "authorities": ["ROLE_STUDENT"] }
 ```
 
-### The auth page
+### The page
 
 `http://localhost:8080/` is our own page, served by the same Spring Boot process from
-`src/main/resources/static/` (`index.html`, `app.css`, `app.js`: HTML, CSS and one script, no
-library). Same origin, so there is no CORS bean. `formLogin` stays off, so Spring's "Please sign in"
-page never appears.
+`src/main/resources/static/`: `index.html`, `app.css` and `app.js`, the only three files rule 2 opens.
+Same origin, so there is no CORS bean. `formLogin` stays off, so Spring's "Please sign in" page never
+appears.
 
-- Before login it shows the product, the two roles and the two dev users, labelled dev only.
-- The form posts JSON to `/api/v1/auth/login`; the password field is `type="password"`.
-- The token is kept in one JavaScript variable inside the script's closure: not in `localStorage`,
-  `sessionStorage`, a cookie, the URL or the page text. The page shows the username and role from
-  `GET /api/me` and a 15-minute countdown, never the token.
-- Every call sends `X-Correlation-Id`. On 400, 401, 403 and 409 the page shows `code`, `message` and
-  `correlationId` from the JSON and nothing else.
-- Log out drops the variable and shows the form again; the next call from the page is 401.
+The page is a React 19 + TypeScript app in `frontend/`, built with Vite. `npm run build` writes exactly
+those three files (no hashed chunks); the built files are committed, so `mvn spring-boot:run` needs no
+Node. Motion does the animations and lucide-react the icons.
+
+```text
+cd frontend
+npm install
+npm run dev      # http://localhost:5173, API calls forwarded to :8080 (one origin, no CORS)
+npm run build    # writes ../src/main/resources/static/{index.html,app.js,app.css}
+```
+
+| Signed out | Student | Tutor |
+|---|---|---|
+| Landing page, live tutor catalogue with search, subject chips and sort, the two roles, dev users | Book a tutor: pick a day and an hour, see the price | Teaching desk: requests to confirm or decline, confirmed schedule to complete or cancel |
+| Log in or sign up as a student or tutor | My lessons: upcoming and history, cancel, and a Confirm button that shows the server's 403 | Earnings and money on hold |
+
+- The token is kept in one variable inside `frontend/src/lib/api.ts`: not in `localStorage`,
+  `sessionStorage`, a cookie, the URL or the page text. React components only ever see the username,
+  the role from `GET /api/me` and the expiry time.
+- `dropToken` is the one place the token is forgotten: log out, the 15-minute expiry, or a 401 on a
+  signed-in call. The session ring in the top bar counts the 15 minutes down.
+- Every call sends `X-Correlation-Id`. Each answer shows as a receipt: a sentence, then the HTTP
+  status, and on an error `code`, `message` and `correlationId`. No stack trace.
+- The request log (bottom left) lists what the page sent: method, path, status, code and correlation
+  id. Never a body, never the token.
 
 | Step in the browser | Result on the page |
 |---|---|
 | Open `/` | The tutoring marketplace page, not a Spring login |
 | Sign in as `aliya` with a wrong password | 401 `UNAUTHENTICATED`, `bad username or password`; the form stays |
 | Sign in as `aliya` / `student-dev` | `aliya`, role `STUDENT`, 15:00; no token on the page |
-| Create lesson | 201, status `REQUESTED` |
+| Book Dana for an hour | 201, status `REQUESTED` |
 | Confirm lesson | 403 `FORBIDDEN`; "the row did not change: status is still REQUESTED" |
 | Log out, sign in as `dana` / `tutor-dev`, confirm | 200, status `CONFIRMED` |
 | Log out, read lesson | 401 `UNAUTHENTICATED`, `valid token required` |
@@ -470,7 +545,7 @@ datasource URL.
 | `LessonServicePaymentTest` | Mockito | A mocked `PaymentPort` receives the payment calls. |
 | `LessonServiceTest` | `@SpringBootTest` integration | Lesson service wiring and rule behavior. |
 | `LessonRegistrationServiceTest` | `@SpringBootTest` integration | Registration, tutor persistence, duplicate translation, and the committed counts 0 and 1. It is not `@Transactional`. |
-| `FlywayMigrationTest` | Migration integration | V1, V2 and V3 are the three successful migrations and the old standalone resource is absent. |
+| `FlywayMigrationTest` | Migration integration | V1 to V6 are the six successful migrations in order and the old standalone resource is absent. |
 | `LessonRepositoryTest` | PostgreSQL `@DataJpaTest` slice | EntityManager `persist`, JPQL count/status access, status CHECK values, parameter binding, and flush-time integrity errors. |
 | `LessonMapperTest` | Unit | Every status maps to and from its database word; unknown and null values fail. |
 | `SchemaTest` | `@SpringBootTest` integration | Database constraints and the V2 tutor default. |
@@ -486,12 +561,15 @@ datasource URL.
 | `SecurityRulesTest` | `@WebMvcTest` + `SecurityConfig`, services mocked, `jwt()` | The README rules table: no token 401 `UNAUTHENTICATED`, a student's confirm 403 `FORBIDDEN`, a tutor's confirm 200 with the token's subject as actor, a refused move 409, `/api/me`, health open; refused calls never reach the mocks. |
 | `AuthControllerTest` | `@WebMvcTest` + `SecurityConfig` | Login 200 with `Bearer` and 900, both bad logins the same 401, blank fields 400 without a password check. A refused login logs `login refused for <name> [<correlationId>]`: never the password, one line even if the name holds a line break, and the same id as the error body. |
 | `TokenServiceTest` | Unit, no web layer | A token issued with a test secret decodes with the same secret: subject, `roles` without `ROLE_`, `iss`, 15 minutes; another issuer or secret rejects it. |
-| `DevUsersTest` | Unit | BCrypt hashes, two hashes of one password differ, `ROLE_` prefixes, one exception for wrong password and unknown user. |
+| `DevUsersTest` | `@SpringBootTest` on PostgreSQL | The dev accounts in `app_user`: BCrypt hashes, two hashes of one password differ, `ROLE_` prefixes, each account linked to its profile row, one exception for wrong password and unknown user. |
+| `SignUpApiTest` | `@SpringBootTest` + MockMvc on PostgreSQL | Sign-up answers 201 with a token that works on `/api/me`; the hash is BCrypt; a new tutor shows in the public catalogue without an email; a taken username or email is 409 and writes no half; a tutor without a subject and bad fields are 400. |
+| `BookingFlowTest` | `@SpringBootTest` + MockMvc on PostgreSQL | aliya books dana with real tokens; each side sees its own lessons; a tutor cannot book; a clashing hour is 409 `SLOT_TAKEN`, a past one 400; dana confirms and completes; another tutor gets 403 `not your lesson`; a student may cancel but not complete. |
 | `TokenCheckTest` | `@SpringBootTest` + MockMvc, real decoder | Each row of the token check: no header, `Bearer hello`, another secret, expired, `iss` helpdesk, Basic, an unknown role, a path outside the table. |
 | `LoginApiTest` | `@SpringBootTest` + MockMvc | The real dev users and signer: dana's token decodes to `TUTOR`; the two bad logins are byte-for-byte the same body. |
 | `LessonWorkflowServiceTest` | `@SpringBootTest` on PostgreSQL | `@PreAuthorize` without HTTP: a student and an anonymous caller are denied and the row stays; a tutor confirms; a second confirm or a cancelled lesson is refused. |
 | `AuthFlowTest` | `@SpringBootTest` + MockMvc on PostgreSQL | The marker's path with real tokens: 403 and the row unchanged, 200 `CONFIRMED`, 409, 401 after logout; the log names dana and holds no token or password. |
-| `AuthPageTest` | `@SpringBootTest` + MockMvc | `/` is our page with the product, roles and dev users and no Spring login form; the page files need no token, the script stores nothing; `/api` stays 401. |
+| `AuthPageTest` | `@SpringBootTest` + MockMvc | `/` is our page shell and `app.js` carries the product, roles, dev users and the password field, with no Spring login form; the page files need no token, the bundle stores nothing; `/api` stays 401. |
+| `AuthPageScriptTest` | Unit, reads `frontend/src` | One `dropToken` clears the token; logout, expiry and a rejected token all go through it; no file in `frontend/src` touches storage, cookies or the URL. |
 | `TutorStudentApiTest` | `@SpringBootTest` + MockMvc on PostgreSQL | Tutors and students: create with `Location`, read by UUID, 409 on a taken email (one row stays), 400 on a bad email or rate, 404 on an unknown UUID. Lessons keep `tutorId`/`studentId` and the tutor's name; an unknown tutor or student is 404 and writes no lesson. |
 
 Database tests run `DELETE FROM lesson` in `@BeforeEach` so each method starts with no lesson rows.

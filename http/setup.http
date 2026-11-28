@@ -1,0 +1,76 @@
+### Tutoring marketplace — create the accounts the other request files use (IntelliJ HTTP Client)
+#
+# The application ships no users and no data. Run this file once on a fresh database:
+# it signs up a student and two tutors through the real sign-up endpoint (BCrypt-hashed passwords).
+# Running it again is fine: an account that already exists answers 409, and that counts as done.
+#
+#   aliya / student-dev  -> STUDENT
+#   dana  / tutor-dev    -> TUTOR, Algebra, $25
+#   timur / tutor-dev    -> TUTOR, Physics, $30
+#
+# Never run this against production.
+
+@host = http://localhost:8080
+
+
+### 1. Student aliya -> 201, or 409 if she already exists
+POST {{host}}/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "username": "aliya",
+  "password": "student-dev",
+  "role": "STUDENT",
+  "name": "Aliya Nurlanova",
+  "email": "aliya@example.com"
+}
+
+> {%
+    client.test("created or already there", () =>
+        client.assert(response.status === 201 || response.status === 409, "status " + response.status));
+    if (response.status === 201) client.log("aliya token = " + response.body.accessToken);
+%}
+
+
+### 2. Tutor dana -> 201, or 409 if she already exists
+POST {{host}}/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "username": "dana",
+  "password": "tutor-dev",
+  "role": "TUTOR",
+  "name": "Dana Smith",
+  "email": "dana@example.com",
+  "subject": "Algebra",
+  "hourlyRate": 25.00,
+  "bio": "Maths teacher for eight years. I make equations feel like puzzles, not punishments."
+}
+
+> {%
+    client.test("created or already there", () =>
+        client.assert(response.status === 201 || response.status === 409, "status " + response.status));
+    if (response.status === 201) client.log("dana token = " + response.body.accessToken);
+%}
+
+
+### 3. Tutor timur -> 201, or 409 if he already exists
+POST {{host}}/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "username": "timur",
+  "password": "tutor-dev",
+  "role": "TUTOR",
+  "name": "Timur Akhmetov",
+  "email": "timur@example.com",
+  "subject": "Physics",
+  "hourlyRate": 30.00,
+  "bio": "Olympiad coach. Mechanics, electricity and exam prep with lots of drawings."
+}
+
+> {%
+    client.test("created or already there", () =>
+        client.assert(response.status === 201 || response.status === 409, "status " + response.status));
+    if (response.status === 201) client.log("timur token = " + response.body.accessToken);
+%}

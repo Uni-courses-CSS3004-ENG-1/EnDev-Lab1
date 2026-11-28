@@ -1,0 +1,353 @@
+### Tutoring marketplace — book, confirm, complete, cancel (IntelliJ HTTP Client)
+#
+# 1. docker compose up -d
+# 2. mvn spring-boot:run          (dev profile, port 8080)
+# 3. Run setup.http once, then this file with "Run All Requests in File". It logs in aliya, dana and timur itself.
+#
+# The whole life of a lesson with real tokens:
+#   aliya (STUDENT) books dana -> REQUESTED -> dana confirms (hold) -> CONFIRMED -> dana completes -> COMPLETED
+# and every door that must stay shut: a tutor booking, a student confirming, another tutor touching
+# dana's lesson, a clashing hour, a time in the past.
+#
+# Each run picks a random day 2 to 300 days ahead, so the lessons of an earlier run do not clash.
+# The lessons stay in the dev database and show on the page under aliya and dana.
+
+@host = http://localhost:8080
+
+
+### 1. Log in as the student aliya; pick this run's lesson times
+POST {{host}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "aliya",
+  "password": "student-dev"
+}
+
+> {%
+    client.global.set("studentToken", response.body.accessToken);
+    client.test("200 OK", () => client.assert(response.status === 200, "status " + response.status));
+
+    // a whole hour on a random day; the clash is 30 minutes later, the second lesson 3 hours later
+    const start = new Date(Date.now() + (2 + Math.floor(Math.random() * 299)) * 86400000);
+    start.setUTCHours(10, 0, 0, 0);
+    client.global.set("startsAt", start.toISOString());
+    client.global.set("clashAt", new Date(start.getTime() + 30 * 60000).toISOString());
+    client.global.set("laterAt", new Date(start.getTime() + 3 * 3600000).toISOString());
+    client.log("this run books " + start.toISOString());
+%}
+
+
+### 2. Log in as the tutor dana
+POST {{host}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "dana",
+  "password": "tutor-dev"
+}
+
+> {%
+    client.global.set("tutorToken", response.body.accessToken);
+    client.test("200 OK", () => client.assert(response.status === 200, "status " + response.status));
+%}
+
+
+### 3. Log in as another tutor, timur
+POST {{host}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "timur",
+  "password": "tutor-dev"
+}
+
+> {%
+    client.global.set("otherTutorToken", response.body.accessToken);
+    client.test("200 OK", () => client.assert(response.status === 200, "status " + response.status));
+%}
+
+
+### 4. Dana's tutor id, from her own profile
+GET {{host}}/api/v1/account
+Authorization: Bearer {{tutorToken}}
+
+> {%
+    client.global.set("danaTutorId", response.body.tutorId);
+    client.test("200 OK", () => client.assert(response.status === 200, "status " + response.status));
+    client.test("dana is a tutor", () => client.assert(response.body.role === "TUTOR" && response.body.tutorId));
+%}
+
+
+### ─── Booking ───
+
+
+### 5. aliya books dana for one hour -> 201 REQUESTED, with both names and the price
+POST {{host}}/api/v1/lessons/book
+Authorization: Bearer {{studentToken}}
+Content-Type: application/json
+X-Correlation-Id: http-book
+
+{
+  "tutorId": "{{danaTutorId}}",
+  "subject": "Quadratic equations",
+  "startsAt": "{{startsAt}}"
+}
+
+> {%
+    client.global.set("bookedId", response.body.id);
+    client.global.set("bookedKey", response.body.businessKey);
+    client.test("201 Created", () => client.assert(response.status === 201, "status " + response.status));
+    client.test("REQUESTED", () => client.assert(response.body.status === "REQUESTED"));
+    client.test("the server made the business key", () => client.assert(/^LES-\d{4}-[0-9A-F]{8}$/.test(response.body.businessKey)));
+    client.test("Dana Smith teaches Aliya Nurlanova for $25", () =>
+        client.assert(response.body.tutorName === "Dana Smith" && response.body.studentName === "Aliya Nurlanova" &&
+            response.body.hourlyRate === 25));
+    client.log(response.body.businessKey + " · " + response.body.status + " · " + response.body.startsAt);
+%}
+
+
+### 6. Another booking 30 minutes into that hour -> 409 SLOT_TAKEN
+POST {{host}}/api/v1/lessons/book
+Authorization: Bearer {{studentToken}}
+Content-Type: application/json
+
+{
+  "tutorId": "{{danaTutorId}}",
+  "subject": "Algebra",
+  "startsAt": "{{clashAt}}"
+}
+
+> {%
+    client.test("409", () => client.assert(response.status === 409, "status " + response.status));
+    client.test("code SLOT_TAKEN", () => client.assert(response.body.code === "SLOT_TAKEN"));
+    client.test("the tutor already has a lesson at that time", () =>
+        client.assert(response.body.message === "the tutor already has a lesson at that time"));
+%}
+
+
+### 7. A time in the past -> 400 VALIDATION
+POST {{host}}/api/v1/lessons/book
+Authorization: Bearer {{studentToken}}
+Content-Type: application/json
+
+{
+  "tutorId": "{{danaTutorId}}",
+  "subject": "Algebra",
+  "startsAt": "2020-01-01T10:00:00Z"
+}
+
+> {%
+    client.test("400", () => client.assert(response.status === 400, "status " + response.status));
+    client.test("startsAt must be a future date", () =>
+        client.assert(response.body.message === "startsAt must be a future date", response.body.message));
+%}
+
+
+### 8. A tutor tries to book -> 403 FORBIDDEN (rule 7: students only)
+POST {{host}}/api/v1/lessons/book
+Authorization: Bearer {{tutorToken}}
+Content-Type: application/json
+
+{
+  "tutorId": "{{danaTutorId}}",
+  "subject": "Algebra",
+  "startsAt": "{{laterAt}}"
+}
+
+> {%
+    client.test("403", () => client.assert(response.status === 403, "status " + response.status));
+    client.test("not allowed for your role", () => client.assert(response.body.message === "not allowed for your role"));
+%}
+
+
+### 9. Booking with no token -> 401
+POST {{host}}/api/v1/lessons/book
+Content-Type: application/json
+
+{
+  "tutorId": "{{danaTutorId}}",
+  "subject": "Algebra",
+  "startsAt": "{{laterAt}}"
+}
+
+> {%
+    client.test("401", () => client.assert(response.status === 401, "status " + response.status));
+%}
+
+
+### ─── My lessons ───
+
+
+### 10. aliya's lessons -> 200, the new booking is there
+GET {{host}}/api/v1/lessons/mine
+Authorization: Bearer {{studentToken}}
+
+> {%
+    client.test("200 OK", () => client.assert(response.status === 200, "status " + response.status));
+    client.test("has the booking", () => client.assert(response.body.some(l => l.id === client.global.get("bookedId"))));
+%}
+
+
+### 11. dana's lessons -> 200, the same booking, with the student's name
+GET {{host}}/api/v1/lessons/mine
+Authorization: Bearer {{tutorToken}}
+
+> {%
+    const lesson = response.body.find(l => l.id === client.global.get("bookedId"));
+    client.test("200 OK", () => client.assert(response.status === 200, "status " + response.status));
+    client.test("dana sees it, with Aliya's name", () => client.assert(lesson && lesson.studentName === "Aliya Nurlanova"));
+%}
+
+
+### 12. timur's lessons -> 200, and dana's booking is not among them
+GET {{host}}/api/v1/lessons/mine
+Authorization: Bearer {{otherTutorToken}}
+
+> {%
+    client.test("200 OK", () => client.assert(response.status === 200, "status " + response.status));
+    client.test("not timur's", () => client.assert(!response.body.some(l => l.id === client.global.get("bookedId"))));
+%}
+
+
+### ─── Moving the status ───
+
+
+### 13. The student tries the locked action -> 403 FORBIDDEN, the row stays REQUESTED
+POST {{host}}/api/v1/lessons/{{bookedId}}/confirm
+Authorization: Bearer {{studentToken}}
+
+> {%
+    client.test("403", () => client.assert(response.status === 403, "status " + response.status));
+    client.test("not allowed for your role", () => client.assert(response.body.message === "not allowed for your role"));
+%}
+
+
+### 14. Another tutor tries to confirm dana's lesson -> 403 "not your lesson"
+POST {{host}}/api/v1/lessons/{{bookedId}}/confirm
+Authorization: Bearer {{otherTutorToken}}
+
+> {%
+    client.test("403", () => client.assert(response.status === 403, "status " + response.status));
+    client.test("code FORBIDDEN, not your lesson", () =>
+        client.assert(response.body.code === "FORBIDDEN" && response.body.message === "not your lesson", response.body.message));
+%}
+
+
+### 15. Still REQUESTED after both refusals
+GET {{host}}/api/v1/lessons/{{bookedId}}
+Authorization: Bearer {{studentToken}}
+
+> {%
+    client.test("REQUESTED", () => client.assert(response.body.status === "REQUESTED", response.body.status));
+%}
+
+
+### 16. Completing before confirming -> 409 INVALID_TRANSITION (unpaid cannot complete)
+POST {{host}}/api/v1/lessons/{{bookedId}}/complete
+Authorization: Bearer {{tutorToken}}
+
+> {%
+    client.test("409", () => client.assert(response.status === 409, "status " + response.status));
+    client.test("code INVALID_TRANSITION", () => client.assert(response.body.code === "INVALID_TRANSITION"));
+%}
+
+
+### 17. dana confirms -> 200 CONFIRMED, the payment hold is placed (see the app log)
+POST {{host}}/api/v1/lessons/{{bookedId}}/confirm
+Authorization: Bearer {{tutorToken}}
+
+> {%
+    client.test("200 OK", () => client.assert(response.status === 200, "status " + response.status));
+    client.test("CONFIRMED", () => client.assert(response.body.status === "CONFIRMED"));
+%}
+
+
+### 18. A student may not complete -> 403 (rule 6: tutors only)
+POST {{host}}/api/v1/lessons/{{bookedId}}/complete
+Authorization: Bearer {{studentToken}}
+
+> {%
+    client.test("403", () => client.assert(response.status === 403, "status " + response.status));
+%}
+
+
+### 19. dana completes -> 200 COMPLETED, the hold is released
+POST {{host}}/api/v1/lessons/{{bookedId}}/complete
+Authorization: Bearer {{tutorToken}}
+
+> {%
+    client.test("200 OK", () => client.assert(response.status === 200, "status " + response.status));
+    client.test("COMPLETED", () => client.assert(response.body.status === "COMPLETED"));
+%}
+
+
+### 20. A completed lesson cannot be cancelled -> 409
+POST {{host}}/api/v1/lessons/{{bookedId}}/cancel
+Authorization: Bearer {{studentToken}}
+
+> {%
+    client.test("409", () => client.assert(response.status === 409, "status " + response.status));
+    client.test("code INVALID_TRANSITION", () => client.assert(response.body.code === "INVALID_TRANSITION"));
+%}
+
+
+### 21. The catalogue counts it: dana has at least one lesson taught
+GET {{host}}/api/v1/tutors
+
+> {%
+    const dana = response.body.find(t => t.id === client.global.get("danaTutorId"));
+    client.test("lessonsTaught at least 1", () => client.assert(dana.lessonsTaught >= 1, "" + dana.lessonsTaught));
+    client.log("Dana Smith has taught " + dana.lessonsTaught + " lesson(s)");
+%}
+
+
+### ─── Cancelling ───
+
+
+### 22. aliya books dana again, later that day -> 201
+POST {{host}}/api/v1/lessons/book
+Authorization: Bearer {{studentToken}}
+Content-Type: application/json
+
+{
+  "tutorId": "{{danaTutorId}}",
+  "subject": "Inequalities",
+  "startsAt": "{{laterAt}}"
+}
+
+> {%
+    client.global.set("secondId", response.body.id);
+    client.test("201 Created", () => client.assert(response.status === 201, "status " + response.status));
+%}
+
+
+### 23. Another tutor may not cancel it -> 403 not your lesson
+POST {{host}}/api/v1/lessons/{{secondId}}/cancel
+Authorization: Bearer {{otherTutorToken}}
+
+> {%
+    client.test("403", () => client.assert(response.status === 403, "status " + response.status));
+    client.test("not your lesson", () => client.assert(response.body.message === "not your lesson"));
+%}
+
+
+### 24. aliya cancels her own booking -> 200 CANCELLED
+POST {{host}}/api/v1/lessons/{{secondId}}/cancel
+Authorization: Bearer {{studentToken}}
+
+> {%
+    client.test("200 OK", () => client.assert(response.status === 200, "status " + response.status));
+    client.test("CANCELLED", () => client.assert(response.body.status === "CANCELLED"));
+%}
+
+
+### 25. dana cannot confirm a cancelled lesson -> 409, the row stays CANCELLED
+POST {{host}}/api/v1/lessons/{{secondId}}/confirm
+Authorization: Bearer {{tutorToken}}
+
+> {%
+    client.test("409", () => client.assert(response.status === 409, "status " + response.status));
+    client.test("Cannot move a lesson from CANCELLED to CONFIRMED", () =>
+        client.assert(response.body.message === "Cannot move a lesson from CANCELLED to CONFIRMED", response.body.message));
+%}

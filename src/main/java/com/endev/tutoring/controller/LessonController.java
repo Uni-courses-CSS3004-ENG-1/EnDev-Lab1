@@ -33,7 +33,7 @@ import java.util.UUID;
 // HTTP adapter for lessons. The entity remains behind the registration service.
 @RestController
 @RequestMapping(path = "/api/v1/lessons", produces = MediaType.APPLICATION_JSON_VALUE)
-@Tag(name = "Lessons", description = "Create lessons, find them by UUID, and confirm them")
+@Tag(name = "Lessons", description = "Create lessons, find them by UUID, and move their status")
 public class LessonController {
 
     private final LessonRegistrationService registration;
@@ -116,5 +116,37 @@ public class LessonController {
     public ResponseEntity<LessonResponse> confirm(@PathVariable(name = "id") UUID id,
                                                   Authentication authentication) {
         return ResponseEntity.ok(LessonResponse.from(workflow.confirm(id, authentication.getName())));
+    }
+
+    // CONFIRMED -> COMPLETED: the lesson happened and the payment hold is released.
+    @PostMapping("/{id}/complete")
+    @Operation(summary = "Mark a confirmed lesson as completed (TUTOR only)")
+    @ApiResponse(responseCode = "200", description = "Lesson completed; status is COMPLETED")
+    @ApiResponse(responseCode = "401", description = "valid token required",
+            content = @Content(schema = @Schema(implementation = ApiError.class)))
+    @ApiResponse(responseCode = "403", description = "A STUDENT, or another tutor's lesson",
+            content = @Content(schema = @Schema(implementation = ApiError.class)))
+    @ApiResponse(responseCode = "404", description = "Lesson not found",
+            content = @Content(schema = @Schema(implementation = ApiError.class)))
+    @ApiResponse(responseCode = "409", description = "The lesson rules refuse the move",
+            content = @Content(schema = @Schema(implementation = ApiError.class)))
+    public LessonResponse complete(@PathVariable(name = "id") UUID id, Authentication authentication) {
+        return LessonResponse.from(workflow.complete(id, authentication.getName()));
+    }
+
+    // REQUESTED or CONFIRMED -> CANCELLED, by the lesson's tutor or its student. A held payment is refunded.
+    @PostMapping("/{id}/cancel")
+    @Operation(summary = "Cancel a lesson (its tutor or its student)")
+    @ApiResponse(responseCode = "200", description = "Lesson cancelled; status is CANCELLED")
+    @ApiResponse(responseCode = "401", description = "valid token required",
+            content = @Content(schema = @Schema(implementation = ApiError.class)))
+    @ApiResponse(responseCode = "403", description = "Not your lesson",
+            content = @Content(schema = @Schema(implementation = ApiError.class)))
+    @ApiResponse(responseCode = "404", description = "Lesson not found",
+            content = @Content(schema = @Schema(implementation = ApiError.class)))
+    @ApiResponse(responseCode = "409", description = "The lesson rules refuse the move",
+            content = @Content(schema = @Schema(implementation = ApiError.class)))
+    public LessonResponse cancel(@PathVariable(name = "id") UUID id, Authentication authentication) {
+        return LessonResponse.from(workflow.cancel(id, authentication.getName()));
     }
 }

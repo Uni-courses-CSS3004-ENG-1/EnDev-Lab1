@@ -2,6 +2,7 @@ package com.endev.tutoring.controller;
 
 import com.endev.tutoring.TutoringApplication;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -45,12 +46,19 @@ class TutorStudentApiTest {
     @Autowired
     private ObjectMapper json;
 
+    // the dev database is also the one the app runs on: leave no test tutor in the catalogue
+    @AfterEach
+    void removeTestRows() {
+        cleanRows();
+    }
+
     @BeforeEach
     void cleanRows() {
-        // lessons point at tutors and students, so they go first
+        // lessons point at tutors and students, so they go first.
+        // Rows behind a login (the dev accounts, V4) stay, so aliya and dana can still log in.
         jdbc.update("DELETE FROM lesson");
-        jdbc.update("DELETE FROM student");
-        jdbc.update("DELETE FROM tutor");
+        jdbc.update("DELETE FROM student WHERE id NOT IN (SELECT student_id FROM app_user WHERE student_id IS NOT NULL)");
+        jdbc.update("DELETE FROM tutor WHERE id NOT IN (SELECT tutor_id FROM app_user WHERE tutor_id IS NOT NULL)");
     }
 
     private ResultActions postJson(String path, String body) throws Exception {
@@ -82,7 +90,8 @@ class TutorStudentApiTest {
             postJson("/api/v1/tutors", TUTOR)
                     .andExpect(status().isCreated())
                     .andExpect(header().string("Location", endsWith(
-                            "/api/v1/tutors/" + jdbc.queryForObject("SELECT id FROM tutor", UUID.class))));
+                            "/api/v1/tutors/" + jdbc.queryForObject(
+                            "SELECT id FROM tutor WHERE email = 'dana@example.com'", UUID.class))));
         }
 
         @Test
@@ -93,7 +102,8 @@ class TutorStudentApiTest {
                     .andExpect(status().isConflict())
                     .andExpect(jsonPath("$.code", is("DUPLICATE")))
                     .andExpect(jsonPath("$.message", is("email already exists: dana@example.com")));
-            assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM tutor", Integer.class));
+            assertEquals(1, jdbc.queryForObject(
+                    "SELECT count(*) FROM tutor WHERE email = 'dana@example.com'", Integer.class));
         }
 
         @Test

@@ -8,3 +8,6 @@ target/
 .keys
 keys
 
+
+# frontend build tooling (the built page in src/main/resources/static is committed)
+frontend/node_modules/

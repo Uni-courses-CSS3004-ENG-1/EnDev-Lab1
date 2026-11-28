@@ -28,6 +28,10 @@ public class TutorEntity {
     @Column(name = "hourly_rate", nullable = false)
     private BigDecimal hourlyRate;
 
+    // added by V5; existing tutors got '' from the column default
+    @Column(nullable = false)
+    private String bio = "";
+
     public UUID getId() {
         return id;
     }
@@ -66,5 +70,13 @@ public class TutorEntity {
 
     public void setHourlyRate(BigDecimal hourlyRate) {
         this.hourlyRate = hourlyRate;
+    }
+
+    public String getBio() {
+        return bio;
+    }
+
+    public void setBio(String bio) {
+        this.bio = bio;
     }
 }

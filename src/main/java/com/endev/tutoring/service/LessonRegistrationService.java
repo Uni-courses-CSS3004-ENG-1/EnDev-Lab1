@@ -17,6 +17,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Service
@@ -37,7 +38,7 @@ public class LessonRegistrationService {
 
     @Transactional
     public void register(UUID id, LessonId lesson, String subject, String tutor) {
-        insert(id, lesson, subject, tutor, null, null);
+        insert(id, lesson, subject, tutor, null, null, null);
     }
 
     // A new request: Java picks the UUID, the row starts REQUESTED, and the write is the Lab 3 register.
@@ -49,6 +50,12 @@ public class LessonRegistrationService {
     // Same, with an optional tutor and student. An unknown id is a 404, and nothing is written.
     @Transactional
     public Lesson create(LessonId lesson, String subject, UUID tutorId, UUID studentId) {
+        return create(lesson, subject, tutorId, studentId, null);
+    }
+
+    // Same, with an optional start time: what a student's booking sends.
+    @Transactional
+    public Lesson create(LessonId lesson, String subject, UUID tutorId, UUID studentId, OffsetDateTime startsAt) {
         String tutorName = NO_TUTOR_YET;
         if (tutorId != null) {
             TutorEntity tutor = tutors.find(tutorId).orElseThrow(() -> new TutorNotFoundException(tutorId));
@@ -58,8 +65,8 @@ public class LessonRegistrationService {
             throw new StudentNotFoundException(studentId);
         }
         UUID id = UUID.randomUUID();
-        insert(id, lesson, subject, tutorName, tutorId, studentId);
-        return new Lesson(id, lesson, LessonStatus.REQUESTED, subject, tutorId, studentId);
+        insert(id, lesson, subject, tutorName, tutorId, studentId, startsAt);
+        return new Lesson(id, lesson, LessonStatus.REQUESTED, subject, tutorId, studentId, startsAt);
     }
 
     // Reads one row by its UUID. It never registers, moves or flushes.
@@ -92,7 +99,8 @@ public class LessonRegistrationService {
         return LessonMapper.toStatus(lessons.statusText(lesson.value()));
     }
 
-    private void insert(UUID id, LessonId lesson, String subject, String tutor, UUID tutorId, UUID studentId) {
+    private void insert(UUID id, LessonId lesson, String subject, String tutor, UUID tutorId, UUID studentId,
+                        OffsetDateTime startsAt) {
         if (id == null) {
             throw new IllegalArgumentException("Lesson database id must not be null");
         }
@@ -110,6 +118,7 @@ public class LessonRegistrationService {
         LessonEntity row = LessonMapper.toEntity(id, lesson.value(), LessonStatus.REQUESTED, subject, tutor);
         row.setTutorId(tutorId);
         row.setStudentId(studentId);
+        row.setStartsAt(startsAt);
         try {
             lessons.insert(row);
             // Flush inside the try: otherwise the INSERT runs at commit, outside this catch.

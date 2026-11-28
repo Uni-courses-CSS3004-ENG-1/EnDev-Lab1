@@ -39,6 +39,10 @@ public class LessonEntity {
     @Column(name = "student_id")
     private UUID studentId;
 
+    // added by V6; optional, set when a student books a time
+    @Column(name = "starts_at")
+    private OffsetDateTime startsAt;
+
     // filled by DEFAULT now(); if Java sent it, the null would replace the default
     @Column(name = "created_at", insertable = false, updatable = false)
     private OffsetDateTime createdAt;
@@ -97,6 +101,14 @@ public class LessonEntity {
 
     public void setStudentId(UUID studentId) {
         this.studentId = studentId;
+    }
+
+    public OffsetDateTime getStartsAt() {
+        return startsAt;
+    }
+
+    public void setStartsAt(OffsetDateTime startsAt) {
+        this.startsAt = startsAt;
     }
 
     public OffsetDateTime getCreatedAt() {

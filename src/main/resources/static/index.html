@@ -4,133 +4,20 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <title>Tutoring marketplace · Sign in</title>
+  <meta name="description" content="Tutoring marketplace: students book one-to-one lessons, tutors confirm them.">
+  <title>Tutoring marketplace · Learn from people who love to teach</title>
   <!-- no favicon request: /favicon.ico is not in the rules table -->
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/app.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400..800&display=swap">
+  <script type="module" crossorigin src="/app.js"></script>
+  <link rel="stylesheet" crossorigin href="/app.css">
 </head>
 <body>
-<header class="top">
-  <div class="top-inner">
-    <div class="brand">
-      <span class="logo" aria-hidden="true">T</span>
-      <h1>Tutoring marketplace</h1>
-    </div>
-    <ul class="roles" aria-label="Roles">
-      <li><span class="chip student">STUDENT</span><span class="desc">creates and reads lessons</span></li>
-      <li><span class="chip tutor">TUTOR</span><span class="desc">may also confirm a requested lesson</span></li>
-    </ul>
-  </div>
-</header>
-
-<section class="hero">
-  <p class="lead">Students request lessons.<br><span>Tutors confirm them.</span></p>
-  <p class="sub">Confirming a lesson places the payment hold. Sign in with a dev user to try both roles.</p>
-</section>
-
-<main class="layout">
-  <aside class="side">
-    <section class="card" id="signin-card" aria-labelledby="signin-title">
-      <div class="card-head">
-        <h2 id="signin-title">Sign in</h2>
-        <span class="meta">JWT · 15 min</span>
-      </div>
-      <form id="login-form" novalidate>
-        <div class="field">
-          <label for="username">Username</label>
-          <input id="username" name="username" autocomplete="username" spellcheck="false" placeholder="aliya">
-        </div>
-        <div class="field">
-          <label for="password">Password</label>
-          <input id="password" name="password" type="password" autocomplete="current-password" placeholder="••••••••">
-        </div>
-        <button type="submit" class="primary block">Sign in</button>
-      </form>
-
-      <div class="devusers">
-        <p class="tag">Dev profile only: classroom users, not real accounts</p>
-        <div class="users">
-          <button type="button" class="user" data-user="aliya" data-pass="student-dev"
-                  aria-label="Fill in aliya, password student-dev, role STUDENT">
-            <span class="avatar student" aria-hidden="true">A</span>
-            <span class="who"><code>aliya</code><span class="pass">student-dev</span></span>
-            <span class="chip student">STUDENT</span>
-          </button>
-          <button type="button" class="user" data-user="dana" data-pass="tutor-dev"
-                  aria-label="Fill in dana, password tutor-dev, role TUTOR">
-            <span class="avatar tutor" aria-hidden="true">D</span>
-            <span class="who"><code>dana</code><span class="pass">tutor-dev</span></span>
-            <span class="chip tutor">TUTOR</span>
-          </button>
-        </div>
-      </div>
-    </section>
-
-    <section class="card hidden" id="session-card" aria-labelledby="session-title">
-      <div class="card-head">
-        <h2 id="session-title">Signed in</h2>
-        <span class="live" aria-hidden="true"></span>
-      </div>
-      <dl class="facts">
-        <dt>Username</dt><dd id="me-username">–</dd>
-        <dt>Role</dt><dd id="me-role">–</dd>
-        <dt>Token</dt><dd>Bearer, expires in <span id="me-expiry" class="num">–</span></dd>
-      </dl>
-      <p class="hint">The token lives only in this tab's memory. It is never shown, stored or put in a URL;
-        the username and role above come from <code>GET /api/me</code>.</p>
-      <button type="button" id="logout" class="secondary block">Log out</button>
-    </section>
-  </aside>
-
-  <div class="content">
-    <section class="card" id="lesson-card" aria-labelledby="lesson-title">
-      <div class="card-head">
-        <h2 id="lesson-title">Lessons</h2>
-        <span class="meta">Confirm is <span class="chip tutor">TUTOR</span> only: a student gets 403.</span>
-      </div>
-      <form id="create-form" class="create" novalidate>
-        <div class="field">
-          <label for="business-key">Business key</label>
-          <input id="business-key" class="mono" spellcheck="false">
-        </div>
-        <div class="field">
-          <label for="subject">Subject</label>
-          <input id="subject" value="Algebra">
-        </div>
-        <button type="submit" class="primary">Create lesson</button>
-      </form>
-
-      <hr class="divider">
-
-      <div class="field">
-        <label for="lesson-id">Lesson id (UUID)</label>
-        <div class="idrow">
-          <input id="lesson-id" class="mono" placeholder="created lessons appear here" spellcheck="false">
-          <span id="lesson-status" class="status">–</span>
-        </div>
-      </div>
-      <div class="actions">
-        <button type="button" id="read" class="secondary">Read lesson</button>
-        <button type="button" id="confirm" class="primary">Confirm lesson</button>
-      </div>
-    </section>
-
-    <section class="card" aria-labelledby="result-title">
-      <div class="card-head">
-        <h2 id="result-title">Last response</h2>
-      </div>
-      <div id="result" class="result" aria-live="polite"><p class="muted">No call yet.</p></div>
-      <h3>This session</h3>
-      <ol id="history" class="history"></ol>
-    </section>
-  </div>
-</main>
-
-<footer>
-  Served by the same Spring Boot process. Every call sends <code>X-Correlation-Id</code>;
-  API calls send <code>Authorization: Bearer</code> while you are signed in.
-</footer>
-
-<script src="/app.js"></script>
+  <!-- The page is drawn by app.js (React). Without JavaScript only this note shows. -->
+  <div id="root"></div>
+  <noscript>Tutoring marketplace needs JavaScript to log in and book lessons.</noscript>
 </body>
 </html>

@@ -23,6 +23,8 @@ class AuthPageTest {
     @Autowired
     private MockMvc mvc;
 
+    // index.html is the shell React draws into; the product, roles, dev users and the
+    // password field live in app.js, built from frontend/ by `npm run build`.
     @Test
     void rootIsOurPageNotSpringsLoginForm() throws Exception {
         mvc.perform(get("/"))
@@ -32,10 +34,16 @@ class AuthPageTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(allOf(
                         containsString("Tutoring marketplace"),
+                        containsString("<div id=\"root\">"),
+                        containsString("src=\"/app.js\""),
+                        containsString("href=\"/app.css\""),
+                        not(containsString("Please sign in")))));
+        mvc.perform(get("/app.js"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(allOf(
                         containsString("STUDENT"), containsString("TUTOR"),
-                        containsString("aliya"), containsString("dana"),
-                        containsString("Dev profile only"),
-                        containsString("type=\"password\""),
+                        containsString("/api/v1/auth/login"), containsString("/api/v1/auth/refresh"),
+                        containsString("\"password\""),
                         not(containsString("Please sign in")))));
     }
 
@@ -45,7 +53,7 @@ class AuthPageTest {
         mvc.perform(get("/app.js"))
                 .andExpect(status().isOk())
                 .andExpect(content().string(allOf(
-                        containsString("'Authorization'"),
+                        containsString("Authorization"),
                         containsString("X-Correlation-Id"),
                         not(containsString("localStorage.")),
                         not(containsString("sessionStorage.")),
