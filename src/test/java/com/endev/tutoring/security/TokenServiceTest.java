@@ -15,6 +15,9 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 
+import org.springframework.security.oauth2.jwt.JwtException;
+import java.util.Optional;
+
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -28,8 +31,22 @@ class TokenServiceTest {
     private static final String SECRET = "test-secret-at-least-32-bytes-long!!";
     private static final SecretKey KEY = JwtConfig.key(SECRET);
 
-    private final TokenService tokens = new TokenService(new NimbusJwtEncoder(new ImmutableSecret<>(KEY)),
+    private final TokenService tokens = new TokenService(new NimbusJwtEncoder(new ImmutableSecret<>(KEY)), KEY,
             new JwtProperties(SECRET, "tutoring"));
+
+    // the refresh token keeps someone signed in; it must never work as an access token, and back
+    @Test
+    void aRefreshTokenOnlyRefreshes() {
+        String refresh = tokens.issueRefresh("aliya");
+        String access = issueForAliya();
+        assertAll(
+                () -> assertEquals(Optional.of("aliya"), tokens.refreshSubject(refresh)),
+                () -> assertEquals(Optional.empty(), tokens.refreshSubject(access)),
+                () -> assertEquals(Optional.empty(), tokens.refreshSubject("not-a-token")),
+                () -> assertThrows(
+                        JwtException.class,
+                        () -> JwtConfig.decoder(KEY, "tutoring").decode(refresh)));
+    }
 
     private String issueForAliya() {
         return tokens.issue(UsernamePasswordAuthenticationToken.authenticated(

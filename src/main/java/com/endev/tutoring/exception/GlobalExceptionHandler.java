@@ -57,12 +57,13 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler({LessonNotFoundException.class, TutorNotFoundException.class,
-            StudentNotFoundException.class})
+            StudentNotFoundException.class, AccountNotFoundException.class})
     ResponseEntity<ApiError> notFound(RuntimeException exception, HttpServletRequest request) {
         return error(HttpStatus.NOT_FOUND, "NOT_FOUND", exception.getMessage(), request);
     }
 
-    @ExceptionHandler({DuplicateLessonException.class, DuplicateEmailException.class})
+    @ExceptionHandler({DuplicateLessonException.class, DuplicateEmailException.class,
+            DuplicateUsernameException.class})
     ResponseEntity<ApiError> duplicate(RuntimeException exception, HttpServletRequest request) {
         return error(HttpStatus.CONFLICT, "DUPLICATE", exception.getMessage(), request);
     }
@@ -73,10 +74,34 @@ public class GlobalExceptionHandler {
         return error(HttpStatus.CONFLICT, "INVALID_TRANSITION", exception.getMessage(), request);
     }
 
+    // a tutor sign-up without a subject or a price
+    @ExceptionHandler(InvalidSignUpException.class)
+    ResponseEntity<ApiError> badSignUp(InvalidSignUpException exception, HttpServletRequest request) {
+        return error(HttpStatus.BAD_REQUEST, "VALIDATION", exception.getMessage(), request);
+    }
+
+    // the tutor already teaches within an hour of that start time
+    @ExceptionHandler(SlotTakenException.class)
+    ResponseEntity<ApiError> slotTaken(SlotTakenException exception, HttpServletRequest request) {
+        return error(HttpStatus.CONFLICT, "SLOT_TAKEN", exception.getMessage(), request);
+    }
+
+    // the right role, but another tutor's (or student's) lesson
+    @ExceptionHandler(NotYourLessonException.class)
+    ResponseEntity<ApiError> notYours(NotYourLessonException exception, HttpServletRequest request) {
+        return error(HttpStatus.FORBIDDEN, "FORBIDDEN", exception.getMessage(), request);
+    }
+
     // @PreAuthorize said no inside the controller call; the filters answer the URL rule the same way
     @ExceptionHandler(AccessDeniedException.class)
     ResponseEntity<ApiError> wrongRole(HttpServletRequest request) {
         return error(HttpStatus.FORBIDDEN, "FORBIDDEN", "not allowed for your role", request);
+    }
+
+    // POST /api/v1/auth/refresh without a valid cookie
+    @ExceptionHandler(SessionExpiredException.class)
+    ResponseEntity<ApiError> sessionExpired(SessionExpiredException exception, HttpServletRequest request) {
+        return error(HttpStatus.UNAUTHORIZED, "UNAUTHENTICATED", exception.getMessage(), request);
     }
 
     // login only: unknown user and wrong password are the same answer

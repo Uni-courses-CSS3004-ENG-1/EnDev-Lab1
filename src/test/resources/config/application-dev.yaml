@@ -1,0 +1,9 @@
+# Tests only. They run against the laptop database but in their own schema, "test", so the rows they
+# create and delete never touch the data the running app shows. Flyway creates the schema if missing.
+spring:
+  datasource:
+    hikari:
+      schema: test
+  flyway:
+    schemas: test
+    default-schema: test

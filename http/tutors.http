@@ -1,0 +1,128 @@
+### Tutoring marketplace — the tutor catalogue (IntelliJ HTTP Client)
+#
+# 1. docker compose up -d
+# 2. mvn spring-boot:run          (dev profile, port 8080)
+# 3. Run setup.http once, then this file with "Run All Requests in File". It logs in by itself.
+#
+# GET /api/v1/tutors is rule 5 in SecurityConfig: open without a token, this exact path only.
+# Reading one tutor by UUID (/api/v1/tutors/{id}) still needs a token, because that answer has the email.
+
+@host = http://localhost:8080
+
+
+### 1. The public catalogue, no token -> 200, A to Z, no emails
+GET {{host}}/api/v1/tutors
+
+> {%
+    client.test("200 OK without a token", () => client.assert(response.status === 200, "status " + response.status));
+    client.test("the dev tutors are there", () =>
+        client.assert(["Dana Smith", "Timur Akhmetov"].every(n => response.body.some(t => t.name === n))));
+    client.test("sorted by name", () => {
+        const names = response.body.map(t => t.name);
+        client.assert(names.join() === [...names].sort((a, b) => a.localeCompare(b)).join(), names.join());
+    });
+    client.test("every card has subject, price, bio and lessonsTaught", () =>
+        client.assert(response.body.every(t => t.subject && t.hourlyRate > 0 && t.bio !== undefined &&
+            typeof t.lessonsTaught === "number")));
+    client.test("no emails in the public list", () => client.assert(JSON.stringify(response.body).indexOf("@") === -1));
+
+    const dana = response.body.find(t => t.name === "Dana Smith" && t.bio.startsWith("Maths"));
+    client.assert(dana, "run setup.http first");
+    client.global.set("catalogueDanaId", dana.id);
+    client.log(response.body.map(t => t.name + " · " + t.subject + " · $" + t.hourlyRate + "/h · " +
+        t.lessonsTaught + " taught").join("\n"));
+%}
+
+
+### 2. One tutor by UUID, no token -> 401: only the list is public
+GET {{host}}/api/v1/tutors/{{catalogueDanaId}}
+
+> {%
+    client.test("401", () => client.assert(response.status === 401, "status " + response.status));
+    client.test("valid token required", () => client.assert(response.body.message === "valid token required"));
+%}
+
+
+### 3. Log in as the student aliya
+POST {{host}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "aliya",
+  "password": "student-dev"
+}
+
+> {%
+    client.global.set("studentToken", response.body.accessToken);
+    client.test("200 OK", () => client.assert(response.status === 200, "status " + response.status));
+%}
+
+
+### 4. One tutor by UUID, with a token -> 200, with email and bio
+GET {{host}}/api/v1/tutors/{{catalogueDanaId}}
+Authorization: Bearer {{studentToken}}
+
+> {%
+    client.test("200 OK", () => client.assert(response.status === 200, "status " + response.status));
+    client.test("Dana, Algebra, $25", () =>
+        client.assert(response.body.name === "Dana Smith" && response.body.subject === "Algebra" &&
+            response.body.hourlyRate === 25));
+    client.test("email is here, behind the token", () => client.assert(response.body.email.includes("@")));
+%}
+
+
+### 5. Create a tutor through the Lab 3 API (no login) -> 201; bio is optional and defaults to ""
+POST {{host}}/api/v1/tutors
+Authorization: Bearer {{studentToken}}
+Content-Type: application/json
+
+{
+  "name": "Laura Field",
+  "email": "laura-{{$timestamp}}@example.com",
+  "subject": "Geography",
+  "hourlyRate": 19.50
+}
+
+> {%
+    client.global.set("apiTutorId", response.body.id);
+    client.test("201 Created", () => client.assert(response.status === 201, "status " + response.status));
+    client.test("Location ends with the UUID", () =>
+        client.assert(response.headers.valueOf("Location").endsWith(response.body.id)));
+    client.test("empty bio", () => client.assert(response.body.bio === ""));
+%}
+
+
+### 6. That tutor now shows in the catalogue too
+GET {{host}}/api/v1/tutors
+
+> {%
+    client.test("listed", () => client.assert(response.body.some(t => t.id === client.global.get("apiTutorId"))));
+%}
+
+
+### 7. A price of 0 -> 400 VALIDATION
+POST {{host}}/api/v1/tutors
+Authorization: Bearer {{studentToken}}
+Content-Type: application/json
+
+{
+  "name": "Free Tutor",
+  "email": "free-{{$timestamp}}@example.com",
+  "subject": "Geography",
+  "hourlyRate": 0
+}
+
+> {%
+    client.test("400", () => client.assert(response.status === 400, "status " + response.status));
+    client.test("code VALIDATION", () => client.assert(response.body.code === "VALIDATION"));
+%}
+
+
+### 8. An unknown tutor UUID -> 404 NOT_FOUND
+GET {{host}}/api/v1/tutors/7d3f0a52-1c2b-4c55-9a51-2f9d0c1e4b6a
+Authorization: Bearer {{studentToken}}
+
+> {%
+    client.test("404", () => client.assert(response.status === 404, "status " + response.status));
+    client.test("code NOT_FOUND", () => client.assert(response.body.code === "NOT_FOUND"));
+%}

@@ -15,11 +15,12 @@ public final class TutorMapper {
         entity.setEmail(tutor.email());
         entity.setSubject(tutor.subject());
         entity.setHourlyRate(tutor.hourlyRate());
+        entity.setBio(tutor.bio() == null ? "" : tutor.bio());
         return entity;
     }
 
     public static Tutor toTutor(TutorEntity entity) {
         return new Tutor(entity.getId(), entity.getName(), entity.getEmail(), entity.getSubject(),
-                entity.getHourlyRate());
+                entity.getHourlyRate(), entity.getBio());
     }
 }

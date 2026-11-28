@@ -13,6 +13,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest(classes = TutoringApplication.class)
 class FlywayMigrationTest {
@@ -25,10 +26,11 @@ class FlywayMigrationTest {
         List<Map<String, Object>> history = jdbc.queryForList("""
                 SELECT version, description, success
                 FROM flyway_schema_history
+                WHERE version IS NOT NULL
                 ORDER BY installed_rank
                 """);
 
-        assertEquals(3, history.size());
+        assertEquals(6, history.size());
         assertAll(
                 () -> assertEquals("1", history.get(0).get("version")),
                 () -> assertEquals("create lesson", history.get(0).get("description")),
@@ -38,7 +40,14 @@ class FlywayMigrationTest {
                 () -> assertEquals(Boolean.TRUE, history.get(1).get("success")),
                 () -> assertEquals("3", history.get(2).get("version")),
                 () -> assertEquals("create tutor and student", history.get(2).get("description")),
-                () -> assertEquals(Boolean.TRUE, history.get(2).get("success")));
+                () -> assertEquals(Boolean.TRUE, history.get(2).get("success")),
+                () -> assertEquals("4", history.get(3).get("version")),
+                () -> assertEquals("create app user", history.get(3).get("description")),
+                () -> assertEquals("5", history.get(4).get("version")),
+                () -> assertEquals("add tutor bio", history.get(4).get("description")),
+                () -> assertEquals("6", history.get(5).get("version")),
+                () -> assertEquals("add lesson starts at", history.get(5).get("description")),
+                () -> assertTrue(history.stream().allMatch(row -> Boolean.TRUE.equals(row.get("success")))));
     }
 
     @Test

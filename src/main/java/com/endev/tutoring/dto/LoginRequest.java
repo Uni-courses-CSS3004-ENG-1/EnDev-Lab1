@@ -5,7 +5,8 @@ import jakarta.validation.constraints.NotBlank;
 
 // The only body in this API that carries a password.
 public record LoginRequest(
-        @NotBlank @Schema(requiredMode = Schema.RequiredMode.REQUIRED, example = "aliya") String username,
+        @NotBlank @Schema(requiredMode = Schema.RequiredMode.REQUIRED, description = "Email (or an older username)",
+                example = "aliya@example.com") String username,
         @NotBlank @Schema(requiredMode = Schema.RequiredMode.REQUIRED, example = "student-dev",
                 format = "password") String password) {
 

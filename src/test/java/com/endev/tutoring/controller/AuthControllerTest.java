@@ -3,6 +3,7 @@ package com.endev.tutoring.controller;
 import com.endev.tutoring.TutoringApplication;
 import com.endev.tutoring.security.SecurityConfig;
 import com.endev.tutoring.security.TokenService;
+import com.endev.tutoring.service.AccountService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -58,6 +59,14 @@ class AuthControllerTest {
 
     @MockitoBean
     private TokenService tokens;
+
+    // sign-up's service; the login tests never reach it
+    @MockitoBean
+    private AccountService accounts;
+
+    // refresh's account lookup; the login tests never reach it
+    @MockitoBean
+    private org.springframework.security.core.userdetails.UserDetailsService users;
 
     @MockitoBean
     private JwtDecoder jwtDecoder;

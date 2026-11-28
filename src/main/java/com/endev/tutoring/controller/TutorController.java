@@ -2,6 +2,7 @@ package com.endev.tutoring.controller;
 
 import com.endev.tutoring.dto.ApiError;
 import com.endev.tutoring.dto.CreateTutorRequest;
+import com.endev.tutoring.dto.TutorCardResponse;
 import com.endev.tutoring.dto.TutorResponse;
 import com.endev.tutoring.model.Tutor;
 import com.endev.tutoring.service.TutorService;
@@ -22,11 +23,12 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import java.net.URI;
+import java.util.List;
 import java.util.UUID;
 
 @RestController
 @RequestMapping(path = "/api/v1/tutors", produces = MediaType.APPLICATION_JSON_VALUE)
-@Tag(name = "Tutors", description = "Create tutors and find them by UUID")
+@Tag(name = "Tutors", description = "Browse tutors, create them and find them by UUID")
 public class TutorController {
 
     private final TutorService tutors;
@@ -47,6 +49,14 @@ public class TutorController {
         URI location = ServletUriComponentsBuilder.fromCurrentRequest().path("/{id}")
                 .buildAndExpand(tutor.id()).toUri();
         return ResponseEntity.created(location).body(TutorResponse.from(tutor));
+    }
+
+    // Public: the page shows the catalogue before anyone logs in. TutorCardResponse has no email.
+    @GetMapping
+    @Operation(summary = "List every tutor (no token needed)", security = {})
+    @ApiResponse(responseCode = "200", description = "Tutors, A to Z")
+    public List<TutorCardResponse> list() {
+        return tutors.catalogue().stream().map(TutorCardResponse::from).toList();
     }
 
     @GetMapping("/{id}")
